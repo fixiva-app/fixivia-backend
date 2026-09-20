@@ -7,13 +7,16 @@ import 'auth_api.dart';
 
 class HttpAuthApi implements AuthApi {
   HttpAuthApi({required this.baseUrl, http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final String baseUrl;
   final http.Client _client;
 
   @override
-  Future<void> requestOtp({required String mobile, required String purpose}) async {
+  Future<void> requestOtp({
+    required String mobile,
+    required String purpose,
+  }) async {
     final res = await _client.post(
       Uri.parse('$baseUrl/v1/otp/request'),
       headers: {'Content-Type': 'application/json'},
@@ -67,5 +70,29 @@ class HttpAuthApi implements AuthApi {
         partnerId: user['partner_id'] as String?,
       ),
     );
+  }
+
+  @override
+  Future<List<AuthResult>> injectDevUsers() async {
+    final res = await _client.post(Uri.parse('$baseUrl/v1/dev/inject-users'));
+    if (res.statusCode != 200) return [];
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['accounts'] as List<dynamic>? ?? [];
+    return [
+      for (final raw in list)
+        () {
+          final row = raw as Map<String, dynamic>;
+          final user = row['user'] as Map<String, dynamic>;
+          return AuthResult(
+            token: row['token'] as String,
+            user: SessionUser(
+              id: user['id'] as String,
+              role: roleFromApi(user['role'] as String),
+              fullName: user['full_name'] as String,
+              partnerId: user['partner_id'] as String?,
+            ),
+          );
+        }(),
+    ];
   }
 }

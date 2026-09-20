@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../api/client.dart';
 import '../../core/booking_rules.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/components/components.dart';
 import '../../l10n/app_localizations.dart';
-import '../../shared/widgets/fx_choice_button.dart';
-import '../../shared/widgets/fx_primary_button.dart';
-import '../../shared/widgets/fx_secondary_button.dart';
 
 class BookingFlow extends StatefulWidget {
   const BookingFlow({required this.api, super.key});
@@ -57,35 +56,40 @@ class _BookingFlowState extends State<BookingFlow> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.bookAService)),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Step ${_step + 1} of 4'),
-            const SizedBox(height: 12),
-            Expanded(child: _body()),
-            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-            Row(
-              children: [
-                if (_step > 0)
-                  FxSecondaryButton(
-                    label: 'Back',
-                    testId: 'customer_booking_back',
-                    onPressed: () => setState(() => _step -= 1),
-                  ),
-                const Spacer(),
-                FxPrimaryButton(
-                  label: _step == 3 ? 'Confirm booking' : 'Next',
-                  testId: 'customer_booking_next',
-                  onPressed: _next,
-                ),
-              ],
+    return AppSubpageScaffold(
+      title: l10n.bookAService,
+      footer: Row(
+        children: [
+          if (_step > 0)
+            AppButton(
+              text: 'Back',
+              testId: 'customer_booking_back',
+              variant: AppButtonVariant.ghost,
+              expands: false,
+              onPressed: () => setState(() => _step -= 1),
             ),
+          if (_step > 0) const SizedBox(width: 8),
+          Expanded(
+            child: AppButton(
+              text: _step == 3 ? 'Confirm booking' : 'Next',
+              testId: 'customer_booking_next',
+              showArrow: _step < 3,
+              onPressed: _next,
+            ),
+          ),
+        ],
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        children: [
+          _StepPills(step: _step),
+          const SizedBox(height: 16),
+          AppCard(child: _body()),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            AppAlert(title: _error!, destructive: true),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -98,14 +102,25 @@ class _BookingFlowState extends State<BookingFlow> {
   }
 
   Widget _categoryStep() {
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text(
+          'What do you need?',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Pick a featured service or another category.',
+          style: TextStyle(color: AppColors.muted),
+        ),
+        const SizedBox(height: 16),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             for (final c in _featuredCats)
-              FxChoiceButton(
+              AppChoice(
                 label: '${c['name_en']}',
                 selected: _categoryId == c['id'],
                 testId: 'customer_booking_category_${c['slug']}',
@@ -113,36 +128,57 @@ class _BookingFlowState extends State<BookingFlow> {
               ),
           ],
         ),
-        const SizedBox(height: 16),
-        const Text('Other'),
-        DropdownButton<String>(
-          key: const Key('customer_booking_category_other'),
-          hint: const Text('Other categories'),
-          value: _otherCats.any((c) => c['id'] == _categoryId) ? _categoryId : null,
-          items: [
-            for (final c in _otherCats)
-              DropdownMenuItem(value: c['id'] as String, child: Text('${c['name_en']}')),
-          ],
-          onChanged: (v) => setState(() => _categoryId = v),
-        ),
+        if (_otherCats.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          AppSelect<String>(
+            testId: 'customer_booking_category_other',
+            label: 'Other categories',
+            placeholder: 'Choose another service',
+            initialValue: _otherCats.any((c) => c['id'] == _categoryId)
+                ? _categoryId
+                : null,
+            items: [
+              for (final c in _otherCats)
+                AppSelectItem(
+                  value: c['id'] as String,
+                  label: '${c['name_en']}',
+                ),
+            ],
+            selectedOptionBuilder: (context, value) {
+              for (final c in _otherCats) {
+                if (c['id'] == value) return Text('${c['name_en']}');
+              }
+              return Text(value);
+            },
+            onChanged: (v) => setState(() => _categoryId = v),
+          ),
+        ],
       ],
     );
   }
 
   Widget _problemStep() {
     final cat = _cat;
-    if (cat == null) return const Text('Pick a category first');
-    final problems = (cat['problems'] as List<dynamic>);
+    if (cat == null) {
+      return const Text('Pick a category first');
+    }
+    final problems = cat['problems'] as List<dynamic>;
     final featured = problems.where((p) => p['featured_rank'] != null);
     final other = problems.where((p) => p['featured_rank'] == null);
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text(
+          'What’s wrong?',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
+        const SizedBox(height: 16),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             for (final p in featured)
-              FxChoiceButton(
+              AppChoice(
                 label: '${p['text_en']}',
                 selected: _problems.contains(p['id']),
                 testId: 'customer_booking_problem_${p['id']}',
@@ -157,22 +193,31 @@ class _BookingFlowState extends State<BookingFlow> {
               ),
           ],
         ),
-        const SizedBox(height: 12),
-        const Text('Other'),
-        for (final p in other)
-          CheckboxListTile(
-            key: Key('customer_booking_problem_other_${p['id']}'),
-            title: Text('${p['text_en']}'),
-            value: _problems.contains(p['id']),
-            onChanged: (_) => setState(() {
-              final id = p['id'] as String;
-              if (_problems.contains(id)) {
-                _problems.remove(id);
-              } else {
-                _problems.add(id);
-              }
-            }),
+        if (other.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('Other', style: TextStyle(color: AppColors.muted)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final p in other)
+                AppChoice(
+                  label: '${p['text_en']}',
+                  selected: _problems.contains(p['id']),
+                  testId: 'customer_booking_problem_other_${p['id']}',
+                  onTap: () => setState(() {
+                    final id = p['id'] as String;
+                    if (_problems.contains(id)) {
+                      _problems.remove(id);
+                    } else {
+                      _problems.add(id);
+                    }
+                  }),
+                ),
+            ],
           ),
+        ],
       ],
     );
   }
@@ -183,36 +228,62 @@ class _BookingFlowState extends State<BookingFlow> {
     for (final p in (cat?['problems'] as List<dynamic>? ?? [])) {
       if (_problems.contains(p['id'])) names.add('${p['text_en']}');
     }
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Category: ${cat?['name_en'] ?? ''}'),
-        const SizedBox(height: 8),
-        Text('Problems: ${names.join(', ')}'),
+        const Text(
+          'Review',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
+        const SizedBox(height: 12),
+        InfoLine(label: 'Category', value: '${cat?['name_en'] ?? ''}'),
+        InfoLine(label: 'Problems', value: names.join(', ')),
       ],
     );
   }
 
   Widget _whenStep() {
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Address'),
-        DropdownButton<String>(
-          key: const Key('customer_booking_address'),
-          value: _addressId,
-          items: [
-            for (final a in _addresses)
-              DropdownMenuItem(
-                value: a['id'] as String,
-                child: Text('${a['label']} ${a['pincode']}'),
-              ),
-          ],
-          onChanged: (v) => setState(() => _addressId = v),
+        const Text(
+          'When should we visit?',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
-        const SizedBox(height: 12),
-        Text('Date: ${_date.toIso8601String().split('T').first}'),
-        FxSecondaryButton(
-          label: 'Pick date',
+        const SizedBox(height: 16),
+        if (_addresses.isNotEmpty)
+          AppSelect<String>(
+            testId: 'customer_booking_address',
+            label: 'Address',
+            initialValue: _addressId,
+            items: [
+              for (final a in _addresses)
+                AppSelectItem(
+                  value: a['id'] as String,
+                  label: '${a['label']} ${a['pincode']}',
+                ),
+            ],
+            selectedOptionBuilder: (context, value) {
+              for (final a in _addresses) {
+                if (a['id'] == value) {
+                  return Text('${a['label']} ${a['pincode']}');
+                }
+              }
+              return Text(value);
+            },
+            onChanged: (v) => setState(() => _addressId = v),
+          ),
+        const SizedBox(height: 16),
+        Text(
+          'Date: ${_date.toIso8601String().split('T').first}',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        AppButton(
+          text: 'Pick date',
           testId: 'customer_booking_date',
+          variant: AppButtonVariant.outline,
+          expands: false,
           onPressed: () async {
             final picked = await showDatePicker(
               context: context,
@@ -223,17 +294,17 @@ class _BookingFlowState extends State<BookingFlow> {
             if (picked != null) setState(() => _date = picked);
           },
         ),
-        const SizedBox(height: 12),
-        Row(
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
           children: [
-            FxChoiceButton(
+            AppChoice(
               label: 'Morning 09–13',
               selected: _slot == 'morning',
               testId: 'customer_booking_slot_morning',
               onTap: () => setState(() => _slot = 'morning'),
             ),
-            const SizedBox(width: 8),
-            FxChoiceButton(
+            AppChoice(
               label: 'Evening 13–18',
               selected: _slot == 'evening',
               testId: 'customer_booking_slot_evening',
@@ -271,5 +342,79 @@ class _BookingFlowState extends State<BookingFlow> {
     } catch (e) {
       setState(() => _error = e.toString());
     }
+  }
+}
+
+class _StepPills extends StatelessWidget {
+  const _StepPills({required this.step});
+
+  final int step;
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['Service', 'Problem', 'Review', 'Schedule'];
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            for (var i = 0; i < labels.length; i++)
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: i == step ? AppColors.primaryGradient : null,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      labels[i],
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: i == step ? AppColors.white : AppColors.muted,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class InfoLine extends StatelessWidget {
+  const InfoLine({required this.label, required this.value, super.key});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(label, style: const TextStyle(color: AppColors.muted)),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

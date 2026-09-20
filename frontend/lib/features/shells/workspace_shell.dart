@@ -2,19 +2,25 @@ import 'package:flutter/material.dart';
 
 import '../../api/client.dart';
 import '../../core/session.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/components/components.dart';
 import '../../l10n/app_localizations.dart';
-import '../../shared/theme/fx_colors.dart';
 import '../../shared/widgets/fx_logo.dart';
-import '../../shared/widgets/fx_primary_button.dart';
-import '../../shared/widgets/fx_secondary_button.dart';
-import '../../shared/widgets/fx_text_field.dart';
 import '../customer/booking_flow.dart';
+import 'pages/resource_pages.dart';
+import 'pages/workspace_page.dart';
 
 class WorkspaceShell extends StatefulWidget {
-  const WorkspaceShell({required this.api, required this.user, super.key});
+  const WorkspaceShell({
+    required this.api,
+    required this.user,
+    this.onLogout,
+    super.key,
+  });
 
   final ApiClient api;
   final SessionUser user;
+  final VoidCallback? onLogout;
 
   @override
   State<WorkspaceShell> createState() => _WorkspaceShellState();
@@ -27,87 +33,148 @@ class _WorkspaceShellState extends State<WorkspaceShell> {
     switch (widget.user.role) {
       case UserRole.customer:
         return [
-          _Tab('Home', Icons.home, () => _CustomerHome(api: widget.api, user: widget.user)),
-          _Tab('Bookings', Icons.event, () => _JsonPage(api: widget.api, path: '/v1/bookings', testId: 'customer_bookings')),
+          _Tab(
+            'Home',
+            Icons.home,
+            () => _CustomerHome(api: widget.api, user: widget.user),
+            testId: 'nav_home',
+          ),
+          _Tab(
+            'Bookings',
+            Icons.event,
+            () => BookingsListPage(
+              api: widget.api,
+              path: '/v1/bookings',
+              testId: 'customer_bookings',
+              title: 'Your bookings',
+              onOpen: (id) => _openBooking(id),
+            ),
+          ),
           _Tab('Addresses', Icons.place, () => _AddressesPage(api: widget.api)),
         ];
       case UserRole.servicePartner:
         return [
           _Tab('Inbox', Icons.inbox, () => _OffersPage(api: widget.api)),
-          _Tab('Schedule', Icons.calendar_today, () => _JsonPage(api: widget.api, path: '/v1/sp/schedule', testId: 'sp_schedule')),
-          _Tab('Earnings', Icons.payments, () => _JsonPage(api: widget.api, path: '/v1/sp/earnings', testId: 'sp_earnings')),
+          _Tab(
+            'Schedule',
+            Icons.calendar_today,
+            () => SchedulePage(api: widget.api),
+          ),
+          _Tab('Earnings', Icons.payments, () => EarningsPage(api: widget.api)),
           _Tab('Profile', Icons.person, () => _SpProfilePage(api: widget.api)),
-          _Tab('Reports', Icons.insights, () => _JsonPage(api: widget.api, path: '/v1/analytics', testId: 'sp_reports')),
+          _Tab(
+            'Reports',
+            Icons.insights,
+            () => AnalyticsPage(api: widget.api, testId: 'sp_reports'),
+          ),
         ];
       case UserRole.partnerOwner:
       case UserRole.partnerAdmin:
         return [
-          _Tab('Open', Icons.pending, () => _JsonPage(api: widget.api, path: '/v1/bookings?status=open', testId: 'partner_open')),
-          _Tab('Upcoming', Icons.upcoming, () => _JsonPage(api: widget.api, path: '/v1/bookings', testId: 'partner_upcoming')),
+          _Tab(
+            'Open',
+            Icons.pending,
+            () => BookingsListPage(
+              api: widget.api,
+              path: '/v1/bookings?status=open',
+              testId: 'partner_open',
+              title: 'Open requests',
+              onOpen: _openBooking,
+            ),
+          ),
+          _Tab(
+            'Upcoming',
+            Icons.upcoming,
+            () => BookingsListPage(
+              api: widget.api,
+              testId: 'partner_upcoming',
+              title: 'Bookings',
+              onOpen: _openBooking,
+            ),
+          ),
           _Tab('Roster', Icons.groups, () => _RosterPage(api: widget.api)),
-          _Tab('Pricing', Icons.sell, () => _JsonPage(api: widget.api, path: '/v1/partner/pricing', testId: 'partner_pricing')),
-          _Tab('Analytics', Icons.insights, () => _JsonPage(api: widget.api, path: '/v1/analytics', testId: 'partner_analytics')),
+          _Tab('Pricing', Icons.sell, () => PricingPage(api: widget.api)),
+          _Tab(
+            'Analytics',
+            Icons.insights,
+            () => AnalyticsPage(api: widget.api, testId: 'partner_analytics'),
+          ),
         ];
       case UserRole.masterAdmin:
         return [
-          _Tab('Partners', Icons.apartment, () => _JsonPage(api: widget.api, path: '/v1/partners', testId: 'master_partners')),
-          _Tab('Categories', Icons.category, () => _JsonPage(api: widget.api, path: '/v1/categories', testId: 'master_categories')),
-          _Tab('Admins', Icons.person_add, () => _JsonPage(api: widget.api, path: '/v1/partner-admin-requests', testId: 'master_admin_reqs')),
-          _Tab('Invoices', Icons.receipt, () => _JsonPage(api: widget.api, path: '/v1/invoices', testId: 'master_invoices')),
-          _Tab('Analytics', Icons.insights, () => _JsonPage(api: widget.api, path: '/v1/analytics', testId: 'master_analytics')),
+          _Tab(
+            'Partners',
+            Icons.apartment,
+            () => PartnersPage(api: widget.api),
+          ),
+          _Tab(
+            'Categories',
+            Icons.category,
+            () => CategoriesPage(api: widget.api),
+          ),
+          _Tab(
+            'Admins',
+            Icons.person_add,
+            () => AdminRequestsPage(api: widget.api),
+          ),
+          _Tab('Invoices', Icons.receipt, () => InvoicesPage(api: widget.api)),
+          _Tab(
+            'Analytics',
+            Icons.insights,
+            () => AnalyticsPage(api: widget.api, testId: 'master_analytics'),
+          ),
         ];
     }
+  }
+
+  void _openBooking(String id) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _BookingDetail(api: widget.api, id: id),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final tabs = _tabs;
-    final wide = MediaQuery.sizeOf(context).width >= 800;
     final body = tabs[_index].builder();
-    return Scaffold(
-      appBar: AppBar(
-        title: const FxLogo(height: 28),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(child: Text(widget.user.fullName)),
-          ),
-        ],
+    return AppWorkspaceFrame(
+      brand: const FxLogo(height: 28),
+      account: AppAccountMenu(
+        name: widget.user.fullName,
+        subtitle: _roleLabel(widget.user.role),
+        logoutLabel: AppLocalizations.of(context).logout,
+        onLogout: widget.onLogout ?? () {},
       ),
-      body: wide
-          ? Row(
-              children: [
-                NavigationRail(
-                  selectedIndex: _index,
-                  onDestinationSelected: (i) => setState(() => _index = i),
-                  labelType: NavigationRailLabelType.all,
-                  destinations: [
-                    for (final t in tabs) NavigationRailDestination(icon: Icon(t.icon), label: Text(t.label)),
-                  ],
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: body),
-              ],
-            )
-          : body,
-      bottomNavigationBar: wide
-          ? null
-          : NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (i) => setState(() => _index = i),
-              destinations: [
-                for (final t in tabs) NavigationDestination(icon: Icon(t.icon), label: t.label),
-              ],
-            ),
+      destinations: [
+        for (final t in tabs)
+          AppNavDest(label: t.label, icon: t.icon, testId: t.testId),
+      ],
+      selectedIndex: _index,
+      onSelect: (i) => setState(() => _index = i),
+      body: body,
     );
   }
 }
 
+String _roleLabel(UserRole role) {
+  return switch (role) {
+    UserRole.masterAdmin => 'Master admin',
+    UserRole.partnerOwner => 'Partner owner',
+    UserRole.partnerAdmin => 'Partner admin',
+    UserRole.servicePartner => 'Service partner',
+    UserRole.customer => 'Customer',
+  };
+}
+
 class _Tab {
-  const _Tab(this.label, this.icon, this.builder);
+  const _Tab(this.label, this.icon, this.builder, {this.testId});
   final String label;
   final IconData icon;
   final Widget Function() builder;
+  final String? testId;
 }
 
 class _CustomerHome extends StatelessWidget {
@@ -117,64 +184,64 @@ class _CustomerHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
+    final l10n = AppLocalizations.of(context);
+    return WorkspacePage(
+      title: 'Hi, ${user.fullName}',
+      subtitle: l10n.authWelcome,
+      testId: 'customer_home',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(AppLocalizations.of(context).customerHome, style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 8),
-          Text(user.fullName),
-          const SizedBox(height: 24),
-          FxPrimaryButton(
-            label: AppLocalizations.of(context).bookAService,
-            testId: 'customer_home_book',
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => BookingFlow(api: api)));
-            },
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ready when you are',
+                  style: TextStyle(color: Color(0xE6FFFFFF), fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.bookAService,
+                  style: const TextStyle(
+                    color: AppColors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.tagline,
+                  style: const TextStyle(
+                    color: Color(0xE6FFFFFF),
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                AppButton(
+                  text: l10n.bookAService,
+                  testId: 'customer_home_book',
+                  variant: AppButtonVariant.onBrand,
+                  expands: false,
+                  showArrow: true,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => BookingFlow(api: api)),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _JsonPage extends StatelessWidget {
-  const _JsonPage({required this.api, required this.path, required this.testId});
-  final ApiClient api;
-  final String path;
-  final String testId;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: api.get(path),
-      builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('${snap.error}'));
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final data = snap.data;
-        final items = data is List ? data : [data];
-        return ListView.builder(
-          key: Key(testId),
-          padding: const EdgeInsets.all(16),
-          itemCount: items.length,
-          itemBuilder: (context, i) {
-            final item = items[i];
-            return Card(
-              child: ListTile(
-                title: Text(item is Map ? '${item['status'] ?? item['trade_name'] ?? item['name_en'] ?? item['type'] ?? item}' : '$item'),
-                subtitle: Text(item is Map ? '$item' : ''),
-                onTap: item is Map && item['id'] != null
-                    ? () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => _BookingDetail(api: api, id: item['id'] as String)),
-                        )
-                    : null,
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }
@@ -194,57 +261,109 @@ class _BookingDetailState extends State<_BookingDetail> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Booking')),
-      body: FutureBuilder(
+    return AppSubpageScaffold(
+      title: 'Booking',
+      child: FutureBuilder(
         future: widget.api.get('/v1/bookings/${widget.id}'),
         builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (snap.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: AppAlert(title: '${snap.error}', destructive: true),
+            );
+          }
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final b = snap.data as Map<String, dynamic>;
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
             children: [
-              Text('${b['category_name']} · ${b['status']}', style: Theme.of(context).textTheme.titleLarge),
-              Text('${b['service_date']} ${b['slot']} · ${b['pincode']}'),
-              Text('Tech: ${b['technician_name'] ?? 'waiting'} ${b['technician_mobile_masked'] ?? ''}'),
-              Text('OTP: ${b['start_work_otp_hint'] ?? '—'} (console in mock)'),
-              const SizedBox(height: 12),
-              FxTextField(label: 'Start-work OTP', testId: 'sp_start_otp', controller: _otp),
-              if (_msg != null) Text(_msg!, style: const TextStyle(color: FxColors.deepOrange)),
-              Wrap(
-                spacing: 8,
-                children: [
-                  FxPrimaryButton(
-                    label: 'Accept',
-                    testId: 'sp_offer_accept',
-                    onPressed: () => _act('/v1/bookings/${widget.id}/accept'),
-                  ),
-                  FxSecondaryButton(
-                    label: 'Decline',
-                    testId: 'sp_offer_decline',
-                    onPressed: () => _act('/v1/bookings/${widget.id}/decline'),
-                  ),
-                  FxSecondaryButton(
-                    label: 'Start work',
-                    testId: 'sp_start_work',
-                    onPressed: () => _act('/v1/bookings/${widget.id}/start', {'code': _otp.text}),
-                  ),
-                  FxSecondaryButton(
-                    label: 'Complete',
-                    testId: 'sp_complete',
-                    onPressed: () => _act('/v1/bookings/${widget.id}/complete', {'payment_mode': 'cash'}),
-                  ),
-                  FxSecondaryButton(
-                    label: 'Drop',
-                    testId: 'sp_drop',
-                    onPressed: () => _act('/v1/bookings/${widget.id}/drop'),
-                  ),
-                  FxSecondaryButton(
-                    label: 'Cancel',
-                    testId: 'customer_booking_cancel',
-                    onPressed: () => _act('/v1/bookings/${widget.id}/cancel'),
-                  ),
-                ],
+              AppCard(
+                title: '${b['category_name'] ?? 'Booking'}',
+                description:
+                    '${b['service_date']} · ${b['slot']} · ${b['pincode']}',
+                trailing: StatusBadge('${b['status']}'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InfoRow(
+                      'Technician',
+                      '${b['technician_name'] ?? 'Waiting'} ${b['technician_mobile_masked'] ?? ''}'
+                          .trim(),
+                    ),
+                    InfoRow('OTP hint', '${b['start_work_otp_hint'] ?? '—'}'),
+                    const SizedBox(height: 16),
+                    AppInputField(
+                      label: 'Start-work OTP',
+                      testId: 'sp_start_otp',
+                      controller: _otp,
+                      placeholder: '6-digit code',
+                    ),
+                    if (_msg != null) ...[
+                      const SizedBox(height: 12),
+                      AppAlert(title: _msg!, destructive: _msg != 'ok'),
+                    ],
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        AppButton(
+                          text: 'Accept',
+                          testId: 'sp_offer_accept',
+                          expands: false,
+                          onPressed: () =>
+                              _act('/v1/bookings/${widget.id}/accept'),
+                        ),
+                        AppButton(
+                          text: 'Decline',
+                          testId: 'sp_offer_decline',
+                          variant: AppButtonVariant.outline,
+                          expands: false,
+                          onPressed: () =>
+                              _act('/v1/bookings/${widget.id}/decline'),
+                        ),
+                        AppButton(
+                          text: 'Start work',
+                          testId: 'sp_start_work',
+                          variant: AppButtonVariant.secondary,
+                          expands: false,
+                          onPressed: () => _act(
+                            '/v1/bookings/${widget.id}/start',
+                            {'code': _otp.text},
+                          ),
+                        ),
+                        AppButton(
+                          text: 'Complete',
+                          testId: 'sp_complete',
+                          variant: AppButtonVariant.outline,
+                          expands: false,
+                          onPressed: () => _act(
+                            '/v1/bookings/${widget.id}/complete',
+                            {'payment_mode': 'cash'},
+                          ),
+                        ),
+                        AppButton(
+                          text: 'Drop',
+                          testId: 'sp_drop',
+                          variant: AppButtonVariant.ghost,
+                          expands: false,
+                          onPressed: () =>
+                              _act('/v1/bookings/${widget.id}/drop'),
+                        ),
+                        AppButton(
+                          text: 'Cancel',
+                          testId: 'customer_booking_cancel',
+                          variant: AppButtonVariant.destructive,
+                          expands: false,
+                          onPressed: () =>
+                              _act('/v1/bookings/${widget.id}/cancel'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           );
@@ -269,32 +388,42 @@ class _OffersPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: api.get('/v1/offers'),
-      builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final items = snap.data as List<dynamic>;
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            for (final o in items)
-              Card(
-                child: ListTile(
-                  title: Text('${o['category_name']} ${o['pincode']}'),
-                  subtitle: Text('${o['service_date']} ${o['slot']} · load ${o['slot_load']}/${o['slot_cap']}'),
-                  trailing: FxPrimaryButton(
-                    label: 'Open',
+    return WorkspacePage(
+      title: 'Open offers',
+      subtitle: 'First accept wins the job.',
+      testId: 'sp_inbox',
+      child: FetchBody(
+        future: api.get('/v1/offers'),
+        builder: (data) {
+          final items = data as List<dynamic>;
+          if (items.isEmpty) return const EmptyHint('No open offers.');
+          return Column(
+            children: [
+              for (final o in items) ...[
+                AppCard(
+                  title: '${o['category_name']} · ${o['pincode']}',
+                  description:
+                      '${o['service_date']} · ${o['slot']} · load ${o['slot_load']}/${o['slot_cap']}',
+                  footer: AppButton(
+                    text: 'Open',
                     testId: 'sp_offer_open_${o['id']}',
+                    expands: true,
+                    showArrow: true,
                     onPressed: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => _BookingDetail(api: api, id: o['id'] as String)),
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            _BookingDetail(api: api, id: o['id'] as String),
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        );
-      },
+                const SizedBox(height: 12),
+              ],
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -312,37 +441,67 @@ class _AddressesPageState extends State<_AddressesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        FxTextField(label: 'Line 1', testId: 'customer_address_line1', controller: _line),
-        FxTextField(label: 'Pincode', testId: 'customer_address_pincode', controller: _pin),
-        FxPrimaryButton(
-          label: 'Save address',
-          testId: 'customer_address_save',
-          onPressed: () async {
-            await widget.api.post('/v1/addresses', {
-              'label': 'home',
-              'line1': _line.text,
-              'pincode': _pin.text,
-              'is_default': true,
-            });
-            setState(() {});
-          },
-        ),
-        FutureBuilder(
-          future: widget.api.get('/v1/addresses'),
-          builder: (context, snap) {
-            if (!snap.hasData) return const SizedBox.shrink();
-            final items = snap.data as List<dynamic>;
-            return Column(
+    return WorkspacePage(
+      title: 'Addresses',
+      subtitle: 'Saved places for home visits.',
+      testId: 'customer_addresses',
+      child: Column(
+        children: [
+          AppCard(
+            title: 'Add address',
+            child: Column(
               children: [
-                for (final a in items) ListTile(title: Text('${a['line1']}'), subtitle: Text('${a['pincode']}')),
+                AppInputField(
+                  label: 'Line 1',
+                  testId: 'customer_address_line1',
+                  controller: _line,
+                  placeholder: 'House / street',
+                ),
+                const SizedBox(height: 12),
+                AppInputField(
+                  label: 'Pincode',
+                  testId: 'customer_address_pincode',
+                  controller: _pin,
+                ),
+                const SizedBox(height: 16),
+                AppButton(
+                  text: 'Save address',
+                  testId: 'customer_address_save',
+                  expands: true,
+                  onPressed: () async {
+                    await widget.api.post('/v1/addresses', {
+                      'label': 'home',
+                      'line1': _line.text,
+                      'pincode': _pin.text,
+                      'is_default': true,
+                    });
+                    setState(() {});
+                  },
+                ),
               ],
-            );
-          },
-        ),
-      ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          FetchBody(
+            future: widget.api.get('/v1/addresses'),
+            builder: (data) {
+              final items = data as List<dynamic>;
+              if (items.isEmpty) return const EmptyHint('No saved addresses.');
+              return Column(
+                children: [
+                  for (final a in items) ...[
+                    AppCard(
+                      title: '${a['line1']}',
+                      description: '${a['pincode']}',
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
@@ -353,33 +512,50 @@ class _RosterPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: api.get('/v1/sp/roster'),
-      builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final items = snap.data as List<dynamic>;
-        return ListView(
-          children: [
-            for (final s in items)
-              ListTile(
-                title: Text('${s['full_name']}'),
-                subtitle: Text('KYC ${s['kyc_status']}'),
-                trailing: Wrap(
-                  children: [
-                    TextButton(
-                      onPressed: () => api.post('/v1/sp/${s['id']}/kyc', {'status': 'approved'}),
-                      child: const Text('Approve'),
-                    ),
-                    TextButton(
-                      onPressed: () => api.post('/v1/sp/${s['id']}/kyc', {'status': 'rejected'}),
-                      child: const Text('Reject'),
-                    ),
-                  ],
+    return WorkspacePage(
+      title: 'Roster',
+      subtitle: 'Service partners on your team.',
+      testId: 'partner_roster',
+      child: FetchBody(
+        future: api.get('/v1/sp/roster'),
+        builder: (data) {
+          final items = data as List<dynamic>;
+          if (items.isEmpty) return const EmptyHint('No technicians yet.');
+          return Column(
+            children: [
+              for (final s in items) ...[
+                AppCard(
+                  title: '${s['full_name']}',
+                  trailing: StatusBadge('${s['kyc_status']}'),
+                  footer: Wrap(
+                    spacing: 8,
+                    children: [
+                      AppButton(
+                        text: 'Approve',
+                        testId: 'roster_approve_${s['id']}',
+                        expands: false,
+                        onPressed: () => api.post('/v1/sp/${s['id']}/kyc', {
+                          'status': 'approved',
+                        }),
+                      ),
+                      AppButton(
+                        text: 'Reject',
+                        testId: 'roster_reject_${s['id']}',
+                        variant: AppButtonVariant.outline,
+                        expands: false,
+                        onPressed: () => api.post('/v1/sp/${s['id']}/kyc', {
+                          'status': 'rejected',
+                        }),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-          ],
-        );
-      },
+                const SizedBox(height: 12),
+              ],
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -396,37 +572,52 @@ class _SpProfilePageState extends State<_SpProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: widget.api.get('/v1/sp/profile'),
-      builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final p = snap.data as Map<String, dynamic>;
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('KYC: ${p['kyc_status']}'),
-            Text('Pincodes: ${p['pincodes']}'),
-            if (_msg != null) Text(_msg!),
-            FxPrimaryButton(
-              label: 'Submit KYC (demo paths)',
-              testId: 'sp_kyc_submit',
-              onPressed: () async {
-                try {
-                  await widget.api.put('/v1/sp/profile', {
-                    'pincodes': p['pincodes'] is List && (p['pincodes'] as List).isNotEmpty ? p['pincodes'] : ['682001'],
-                    'category_ids': p['category_ids'] ?? [],
-                    'aadhaar_path': 'local://masked-aadhaar',
-                    'police_path': 'local://police',
-                  });
-                  setState(() => _msg = 'submitted');
-                } catch (e) {
-                  setState(() => _msg = e.toString());
-                }
-              },
+    return WorkspacePage(
+      title: 'Your profile',
+      testId: 'sp_profile',
+      child: FetchBody(
+        future: widget.api.get('/v1/sp/profile'),
+        builder: (data) {
+          final p = data as Map<String, dynamic>;
+          return AppCard(
+            title: 'KYC',
+            trailing: StatusBadge('${p['kyc_status']}'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InfoRow('Pincodes', '${p['pincodes']}'),
+                if (_msg != null) ...[
+                  const SizedBox(height: 12),
+                  AppAlert(title: _msg!),
+                ],
+                const SizedBox(height: 16),
+                AppButton(
+                  text: 'Submit KYC (demo paths)',
+                  testId: 'sp_kyc_submit',
+                  expands: true,
+                  onPressed: () async {
+                    try {
+                      await widget.api.put('/v1/sp/profile', {
+                        'pincodes':
+                            p['pincodes'] is List &&
+                                (p['pincodes'] as List).isNotEmpty
+                            ? p['pincodes']
+                            : ['682001'],
+                        'category_ids': p['category_ids'] ?? [],
+                        'aadhaar_path': 'local://masked-aadhaar',
+                        'police_path': 'local://police',
+                      });
+                      setState(() => _msg = 'submitted');
+                    } catch (e) {
+                      setState(() => _msg = e.toString());
+                    }
+                  },
+                ),
+              ],
             ),
-          ],
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

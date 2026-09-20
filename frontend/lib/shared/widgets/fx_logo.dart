@@ -12,10 +12,6 @@ class FxLogo extends StatelessWidget {
     final asset = white
         ? 'assets/branding/Fixiva_Logo_white.svg'
         : 'assets/branding/Fixiva_Logo.svg';
-    return SvgPicture.asset(
-      asset,
-      height: height,
-      fit: BoxFit.contain,
-    );
+    return SvgPicture.asset(asset, height: height, fit: BoxFit.contain);
   }
 }

@@ -12,5 +12,10 @@ void main() {
   );
   debugPrint('Fixiva flavor=$flavor api=$apiBase');
   final api = ApiClient(baseUrl: apiBase);
-  runApp(FixviaApp(authApi: HttpAuthApi(baseUrl: apiBase), api: api));
+  runApp(
+    FixviaApp(
+      authApi: HttpAuthApi(baseUrl: apiBase),
+      api: api,
+    ),
+  );
 }

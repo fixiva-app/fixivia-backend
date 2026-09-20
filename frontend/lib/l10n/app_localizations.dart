@@ -152,6 +152,102 @@ abstract class AppLocalizations {
   /// **'Log in'**
   String get login;
 
+  /// No description provided for @authWelcome.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted home services in Kerala'**
+  String get authWelcome;
+
+  /// No description provided for @authLoginTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get authLoginTitle;
+
+  /// No description provided for @authRegisterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create an account'**
+  String get authRegisterTitle;
+
+  /// No description provided for @authLoginSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We’ll send a one-time code to your mobile number.'**
+  String get authLoginSubtitle;
+
+  /// No description provided for @authRegisterSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Join as a customer or a service partner.'**
+  String get authRegisterSubtitle;
+
+  /// No description provided for @authOtpSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the 6-digit code from the console / SMS.'**
+  String get authOtpSent;
+
+  /// No description provided for @authPartnerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation partner'**
+  String get authPartnerLabel;
+
+  /// No description provided for @authPartnerPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a partner'**
+  String get authPartnerPlaceholder;
+
+  /// No description provided for @authRoleCustomer.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer'**
+  String get authRoleCustomer;
+
+  /// No description provided for @authRoleSp.
+  ///
+  /// In en, this message translates to:
+  /// **'Service partner'**
+  String get authRoleSp;
+
+  /// No description provided for @authBrandPoint1.
+  ///
+  /// In en, this message translates to:
+  /// **'Book AC, plumbing, electrical and more'**
+  String get authBrandPoint1;
+
+  /// No description provided for @authBrandPoint2.
+  ///
+  /// In en, this message translates to:
+  /// **'First-accept dispatch — no bidding'**
+  String get authBrandPoint2;
+
+  /// No description provided for @authBrandPoint3.
+  ///
+  /// In en, this message translates to:
+  /// **'OTP-verified start of work'**
+  String get authBrandPoint3;
+
+  /// No description provided for @authOtpFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send OTP. Check the number and try again.'**
+  String get authOtpFailed;
+
+  /// No description provided for @authVerifyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'That code didn’t match. Try again.'**
+  String get authVerifyFailed;
+
+  /// No description provided for @logout.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out'**
+  String get logout;
+
   /// No description provided for @bookAService.
   ///
   /// In en, this message translates to:

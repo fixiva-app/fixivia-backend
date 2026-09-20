@@ -36,6 +36,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String get login => 'Log in';
 
   @override
+  String get authWelcome => 'Trusted home services in Kerala';
+
+  @override
+  String get authLoginTitle => 'Log in';
+
+  @override
+  String get authRegisterTitle => 'Create an account';
+
+  @override
+  String get authLoginSubtitle =>
+      'We’ll send a one-time code to your mobile number.';
+
+  @override
+  String get authRegisterSubtitle => 'Join as a customer or a service partner.';
+
+  @override
+  String get authOtpSent => 'Enter the 6-digit code from the console / SMS.';
+
+  @override
+  String get authPartnerLabel => 'Operation partner';
+
+  @override
+  String get authPartnerPlaceholder => 'Select a partner';
+
+  @override
+  String get authRoleCustomer => 'Customer';
+
+  @override
+  String get authRoleSp => 'Service partner';
+
+  @override
+  String get authBrandPoint1 => 'Book AC, plumbing, electrical and more';
+
+  @override
+  String get authBrandPoint2 => 'First-accept dispatch — no bidding';
+
+  @override
+  String get authBrandPoint3 => 'OTP-verified start of work';
+
+  @override
+  String get authOtpFailed =>
+      'Could not send OTP. Check the number and try again.';
+
+  @override
+  String get authVerifyFailed => 'That code didn’t match. Try again.';
+
+  @override
+  String get logout => 'Log out';
+
+  @override
   String get bookAService => 'Book a Service';
 
   @override

@@ -16,5 +16,13 @@ Seeded OTP login mobiles (check console for codes):
 - `9000000002` Partner owner
 - `9000000003` Technician
 - `9000000004` Customer
+- `9000000005` Partner admin
+
+If the database already existed before partner-admin was added, inject one of each role (dev only, safe to re-run):
+
+```bash
+python -m app.dev_users
+# or POST http://127.0.0.1:8080/v1/dev/inject-users
+```
 
 OTP prints as `[OTP] purpose=login ... code=......`

@@ -1,20 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'api/client.dart';
 import 'core/session.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/auth_api.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/shells/role_shells.dart';
 import 'l10n/app_localizations.dart';
-import 'shared/theme/fx_theme.dart';
 
 class FixviaApp extends StatefulWidget {
-  const FixviaApp({required this.authApi, required this.api, this.locale, super.key});
+  const FixviaApp({
+    required this.authApi,
+    required this.api,
+    this.locale,
+    this.themeMode = ThemeMode.system,
+    super.key,
+  });
 
   final AuthApi authApi;
   final ApiClient api;
   final Locale? locale;
+  final ThemeMode themeMode;
 
   @override
   State<FixviaApp> createState() => _FixviaAppState();
@@ -25,26 +33,48 @@ class _FixviaAppState extends State<FixviaApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Fixiva',
-      locale: widget.locale,
-      theme: fxTheme(),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: _user == null
-          ? AuthScreen(
-              api: widget.authApi,
-              onAuthenticated: (result) {
-                widget.api.token = result.token;
-                setState(() => _user = result.user);
-              },
-            )
-          : shellFor(_user!, widget.api),
+    return ShadApp.custom(
+      themeMode: widget.themeMode,
+      theme: appShadTheme(Brightness.light),
+      darkTheme: appShadTheme(Brightness.dark),
+      appBuilder: (context) {
+        return MaterialApp(
+          title: 'Fixiva',
+          locale: widget.locale,
+          theme: Theme.of(context).copyWith(
+            scaffoldBackgroundColor: AppColors.lightGray,
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: AppColors.deepOrange,
+              secondary: AppColors.warmOrange,
+            ),
+          ),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalShadLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => ShadAppBuilder(child: child!),
+          home: _user == null
+              ? AuthScreen(
+                  api: widget.authApi,
+                  onAuthenticated: (result) {
+                    widget.api.token = result.token;
+                    setState(() => _user = result.user);
+                  },
+                )
+              : shellFor(
+                  _user!,
+                  widget.api,
+                  onLogout: () {
+                    widget.api.token = null;
+                    setState(() => _user = null);
+                  },
+                ),
+        );
+      },
     );
   }
 }

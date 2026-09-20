@@ -36,6 +36,58 @@ class AppLocalizationsMl extends AppLocalizations {
   String get login => 'ലോഗിൻ';
 
   @override
+  String get authWelcome => 'കേരളത്തിലെ വിശ്വസ്ത ഹോം സർവീസുകൾ';
+
+  @override
+  String get authLoginTitle => 'ലോഗിൻ';
+
+  @override
+  String get authRegisterTitle => 'അക്കൗണ്ട് ഉണ്ടാക്കുക';
+
+  @override
+  String get authLoginSubtitle =>
+      'മൊബൈൽ നമ്പറിലേക്ക് ഒറ്റത്തവണ കോഡ് അയയ്ക്കും.';
+
+  @override
+  String get authRegisterSubtitle => 'കസ്റ്റമറായോ സർവീസ് പാർട്ണറായോ ചേരുക.';
+
+  @override
+  String get authOtpSent => 'കൺസോളിലോ SMS-ലോ വന്ന 6 അക്ക കോഡ് നൽകുക.';
+
+  @override
+  String get authPartnerLabel => 'ഓപ്പറേഷൻ പാർട്ണർ';
+
+  @override
+  String get authPartnerPlaceholder => 'പാർട്ണർ തിരഞ്ഞെടുക്കുക';
+
+  @override
+  String get authRoleCustomer => 'കസ്റ്റമർ';
+
+  @override
+  String get authRoleSp => 'സർവീസ് പാർട്ണർ';
+
+  @override
+  String get authBrandPoint1 =>
+      'AC, പ്ലംബിംഗ്, ഇലക്ട്രിക്കൽ എന്നിവ ബുക്ക് ചെയ്യുക';
+
+  @override
+  String get authBrandPoint2 =>
+      'ആദ്യം സ്വീകരിക്കുന്നയാൾക്ക് ജോലി — ബിഡ്ഡിംഗ് ഇല്ല';
+
+  @override
+  String get authBrandPoint3 => 'OTP ഉപയോഗിച്ച് ജോലി ആരംഭം';
+
+  @override
+  String get authOtpFailed =>
+      'OTP അയയ്ക്കാനായില്ല. നമ്പർ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.';
+
+  @override
+  String get authVerifyFailed => 'കോഡ് ശരിയല്ല. വീണ്ടും ശ്രമിക്കുക.';
+
+  @override
+  String get logout => 'ലോഗ് ഔട്ട്';
+
+  @override
   String get bookAService => 'സർവീസ് ബുക്ക് ചെയ്യുക';
 
   @override

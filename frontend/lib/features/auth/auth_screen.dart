@@ -1,17 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/session.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/components/components.dart';
 import '../../core/validators.dart';
 import '../../l10n/app_localizations.dart';
-import '../../shared/theme/fx_colors.dart';
-import '../../shared/widgets/fx_choice_button.dart';
 import '../../shared/widgets/fx_logo.dart';
-import '../../shared/widgets/fx_otp_input.dart';
-import '../../shared/widgets/fx_primary_button.dart';
-import '../../shared/widgets/fx_text_field.dart';
 import 'auth_api.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({required this.api, required this.onAuthenticated, super.key});
+  const AuthScreen({
+    required this.api,
+    required this.onAuthenticated,
+    super.key,
+  });
 
   final AuthApi api;
   final void Function(AuthResult result) onAuthenticated;
@@ -31,6 +35,23 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _partnerId;
   List<Map<String, dynamic>> _partners = [];
   String? _error;
+  List<AuthResult> _devAccounts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (kDebugMode) {
+      _loadDevAccounts();
+    }
+  }
+
+  Future<void> _loadDevAccounts() async {
+    try {
+      final list = await widget.api.injectDevUsers();
+      if (!mounted || list.isEmpty) return;
+      setState(() => _devAccounts = list);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -38,6 +59,15 @@ class _AuthScreenState extends State<AuthScreen> {
     _otp.dispose();
     _name.dispose();
     super.dispose();
+  }
+
+  void _setMode(bool register) {
+    setState(() {
+      _register = register;
+      _sent = false;
+      _otp.clear();
+      _error = null;
+    });
   }
 
   Future<void> _send() async {
@@ -90,108 +120,457 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  String _errorText(AppLocalizations l10n) {
+    return switch (_error) {
+      'otp_request_failed' => l10n.authOtpFailed,
+      'otp_verify_failed' => l10n.authVerifyFailed,
+      _ => _error ?? '',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
+    final compact = appIsCompact(context);
     return Scaffold(
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            const FxLogo(height: 36),
-            const SizedBox(height: 12),
-            Text(l10n.tagline, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                FxChoiceButton(
-                  label: l10n.register,
-                  selected: _register,
-                  testId: 'auth_mode_register',
-                  onTap: () => setState(() => _register = true),
-                ),
-                const SizedBox(width: 8),
-                FxChoiceButton(
-                  label: l10n.login,
-                  selected: !_register,
-                  testId: 'auth_mode_login',
-                  onTap: () => setState(() => _register = false),
-                ),
-              ],
-            ),
-            if (_register) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
+      backgroundColor: AppColors.lightGray,
+      body: compact
+          ? SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
                 children: [
-                  FxChoiceButton(
-                    label: 'Customer',
-                    selected: _role == 'customer',
-                    testId: 'auth_register_role_customer',
-                    onTap: () => setState(() => _role = 'customer'),
-                  ),
-                  FxChoiceButton(
-                    label: 'Service Partner',
-                    selected: _role == 'service_partner',
-                    testId: 'auth_register_role_sp',
-                    onTap: () async {
-                      final list = await widget.api.publicPartners();
-                      setState(() {
-                        _role = 'service_partner';
-                        _partners = list;
-                        if (list.isNotEmpty) {
-                          _partnerId = list.first['id'] as String;
-                        }
-                      });
-                    },
+                  const Center(child: FxLogo(height: 36)),
+                  const SizedBox(height: 28),
+                  _AuthFormCard(
+                    register: _register,
+                    sent: _sent,
+                    busy: _busy,
+                    role: _role,
+                    partnerId: _partnerId,
+                    partners: _partners,
+                    error: _error,
+                    errorText: _error == null ? null : _errorText,
+                    name: _name,
+                    mobile: _mobile,
+                    otp: _otp,
+                    onMode: _setMode,
+                    onCustomer: () => setState(() => _role = 'customer'),
+                    onServicePartner: _pickServicePartner,
+                    onPartnerChanged: (id) => setState(() => _partnerId = id),
+                    onSubmit: _busy ? null : (_sent ? _verify : _send),
+                    devAccounts: _devAccounts,
+                    onDevLogin: widget.onAuthenticated,
                   ),
                 ],
               ),
-              if (_role == 'service_partner' && _partners.isNotEmpty)
-                DropdownButton<String>(
-                  key: const Key('auth_register_partner'),
-                  value: _partnerId,
+            )
+          : Row(
+              children: [
+                const Expanded(flex: 5, child: _BrandPane()),
+                Expanded(
+                  flex: 6,
+                  child: ColoredBox(
+                    color: AppColors.lightGray,
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 48,
+                          vertical: 40,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 440),
+                          child: _AuthFormCard(
+                            register: _register,
+                            sent: _sent,
+                            busy: _busy,
+                            role: _role,
+                            partnerId: _partnerId,
+                            partners: _partners,
+                            error: _error,
+                            errorText: _error == null ? null : _errorText,
+                            name: _name,
+                            mobile: _mobile,
+                            otp: _otp,
+                            onMode: _setMode,
+                            onCustomer: () =>
+                                setState(() => _role = 'customer'),
+                            onServicePartner: _pickServicePartner,
+                            onPartnerChanged: (id) =>
+                                setState(() => _partnerId = id),
+                            onSubmit: _busy ? null : (_sent ? _verify : _send),
+                            devAccounts: _devAccounts,
+                            onDevLogin: widget.onAuthenticated,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Future<void> _pickServicePartner() async {
+    final list = await widget.api.publicPartners();
+    setState(() {
+      _role = 'service_partner';
+      _partners = list;
+      if (list.isNotEmpty) {
+        _partnerId = list.first['id'] as String;
+      }
+    });
+  }
+}
+
+class _BrandPane extends StatelessWidget {
+  const _BrandPane();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    const muted = Color(0xE6FFFFFF);
+    return DecoratedBox(
+      decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(48, 48, 48, 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const FxLogo(white: true, height: 40),
+              const Spacer(),
+              Text(
+                l10n.appTitle,
+                style: const TextStyle(
+                  color: AppColors.white,
+                  fontSize: 42,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                l10n.authWelcome,
+                style: const TextStyle(color: muted, fontSize: 18, height: 1.4),
+              ),
+              const SizedBox(height: 36),
+              _BrandPoint(text: l10n.authBrandPoint1),
+              const SizedBox(height: 14),
+              _BrandPoint(text: l10n.authBrandPoint2),
+              const SizedBox(height: 14),
+              _BrandPoint(text: l10n.authBrandPoint3),
+              const Spacer(),
+              Text(
+                l10n.tagline,
+                style: const TextStyle(color: muted, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BrandPoint extends StatelessWidget {
+  const _BrandPoint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          margin: const EdgeInsets.only(top: 1),
+          decoration: BoxDecoration(
+            color: AppColors.white.withValues(alpha: 0.18),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.check, size: 14, color: AppColors.white),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: AppColors.white,
+              fontSize: 15,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AuthFormCard extends StatelessWidget {
+  const _AuthFormCard({
+    required this.register,
+    required this.sent,
+    required this.busy,
+    required this.role,
+    required this.partnerId,
+    required this.partners,
+    required this.error,
+    required this.errorText,
+    required this.name,
+    required this.mobile,
+    required this.otp,
+    required this.onMode,
+    required this.onCustomer,
+    required this.onServicePartner,
+    required this.onPartnerChanged,
+    required this.onSubmit,
+    required this.devAccounts,
+    required this.onDevLogin,
+  });
+
+  final bool register;
+  final bool sent;
+  final bool busy;
+  final String role;
+  final String? partnerId;
+  final List<Map<String, dynamic>> partners;
+  final String? error;
+  final String Function(AppLocalizations l10n)? errorText;
+  final TextEditingController name;
+  final TextEditingController mobile;
+  final TextEditingController otp;
+  final ValueChanged<bool> onMode;
+  final VoidCallback onCustomer;
+  final VoidCallback onServicePartner;
+  final ValueChanged<String?> onPartnerChanged;
+  final VoidCallback? onSubmit;
+  final List<AuthResult> devAccounts;
+  final void Function(AuthResult result) onDevLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final title = register ? l10n.authRegisterTitle : l10n.authLoginTitle;
+    final subtitle = sent
+        ? l10n.authOtpSent
+        : (register ? l10n.authRegisterSubtitle : l10n.authLoginSubtitle);
+
+    return SizedBox(
+      width: double.infinity,
+      child: AppCard(
+        testId: 'auth_form_card',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.charcoal,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF737373),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            _ModeToggle(
+              register: register,
+              loginLabel: l10n.login,
+              registerLabel: l10n.register,
+              onChanged: onMode,
+            ),
+            if (register) ...[
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  AppChoice(
+                    label: l10n.authRoleCustomer,
+                    selected: role == 'customer',
+                    testId: 'auth_register_role_customer',
+                    onTap: onCustomer,
+                  ),
+                  AppChoice(
+                    label: l10n.authRoleSp,
+                    selected: role == 'service_partner',
+                    testId: 'auth_register_role_sp',
+                    onTap: onServicePartner,
+                  ),
+                ],
+              ),
+              if (role == 'service_partner' && partners.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                AppSelect<String>(
+                  testId: 'auth_register_partner',
+                  label: l10n.authPartnerLabel,
+                  placeholder: l10n.authPartnerPlaceholder,
+                  initialValue: partnerId,
                   items: [
-                    for (final p in _partners)
-                      DropdownMenuItem(
+                    for (final p in partners)
+                      AppSelectItem(
                         value: p['id'] as String,
-                        child: Text('${p['trade_name']}'),
+                        label: '${p['trade_name']}',
                       ),
                   ],
-                  onChanged: (v) => setState(() => _partnerId = v),
+                  selectedOptionBuilder: (context, value) {
+                    for (final p in partners) {
+                      if (p['id'] == value) {
+                        return Text('${p['trade_name']}');
+                      }
+                    }
+                    return Text(value);
+                  },
+                  onChanged: onPartnerChanged,
                 ),
+              ],
+              const SizedBox(height: 16),
+              AppInputField(
+                label: l10n.fullName,
+                placeholder: l10n.fullName,
+                testId: 'auth_register_name',
+                controller: name,
+              ),
             ],
             const SizedBox(height: 16),
-            if (_register)
-              FxTextField(
-                label: l10n.fullName,
-                testId: 'auth_register_name',
-                controller: _name,
-              ),
-            if (_register) const SizedBox(height: 12),
-            FxTextField(
+            AppInputField(
               label: l10n.mobileLabel,
+              placeholder: '9000000001',
               testId: 'auth_login_mobile',
-              controller: _mobile,
+              controller: mobile,
               keyboardType: TextInputType.phone,
+              leading: const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Text(
+                  '+91',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.charcoal,
+                  ),
+                ),
+              ),
             ),
-            if (_sent) ...[
-              const SizedBox(height: 12),
-              FxOtpInput(controller: _otp, testId: 'auth_login_otp_input'),
+            if (sent) ...[
+              const SizedBox(height: 16),
+              AppInputField(
+                testId: 'auth_login_otp_input',
+                controller: otp,
+                label: l10n.otpLabel,
+                placeholder: '••••••',
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
             ],
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: FxColors.deepOrange)),
+            if (error != null && errorText != null) ...[
+              const SizedBox(height: 16),
+              AppAlert(title: errorText!(l10n), destructive: true),
             ],
-            const SizedBox(height: 20),
-            FxPrimaryButton(
-              label: _sent ? l10n.verifyOtp : l10n.sendOtp,
-              testId: _sent ? 'auth_login_verify' : 'auth_login_send_otp',
-              onPressed: _busy ? null : (_sent ? _verify : _send),
+            const SizedBox(height: 24),
+            AppButton(
+              text: sent ? l10n.verifyOtp : l10n.sendOtp,
+              testId: sent ? 'auth_login_verify' : 'auth_login_send_otp',
+              onPressed: onSubmit,
+              isLoading: busy,
+              expands: true,
+              showArrow: !busy,
+            ),
+            if (kDebugMode && devAccounts.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Text(
+                'Dev only — enter as',
+                style: TextStyle(fontSize: 12, color: Color(0xFF737373)),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final acc in devAccounts)
+                    AppChoice(
+                      label: _devRoleLabel(acc.user.role),
+                      selected: false,
+                      testId: 'auth_dev_login_${acc.user.role.name}',
+                      onTap: () => onDevLogin(acc),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({
+    required this.register,
+    required this.loginLabel,
+    required this.registerLabel,
+    required this.onChanged,
+  });
+
+  final bool register;
+  final String loginLabel;
+  final String registerLabel;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.lightGray,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            Expanded(
+              child: AppButton(
+                text: registerLabel,
+                testId: 'auth_mode_register',
+                variant: register
+                    ? AppButtonVariant.primary
+                    : AppButtonVariant.ghost,
+                expands: true,
+                onPressed: () => onChanged(true),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: AppButton(
+                text: loginLabel,
+                testId: 'auth_mode_login',
+                variant: register
+                    ? AppButtonVariant.ghost
+                    : AppButtonVariant.primary,
+                expands: true,
+                onPressed: () => onChanged(false),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+String _devRoleLabel(UserRole role) {
+  return switch (role) {
+    UserRole.masterAdmin => 'Master',
+    UserRole.partnerOwner => 'Owner',
+    UserRole.partnerAdmin => 'P-admin',
+    UserRole.servicePartner => 'Technician',
+    UserRole.customer => 'Customer',
+  };
 }
