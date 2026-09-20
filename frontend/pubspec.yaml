@@ -1,0 +1,29 @@
+name: fixvia
+description: Fixiva home services — Flutter for web, iOS, and Android.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.1.0
+  http: ^1.2.2
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/branding/

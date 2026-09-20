@@ -1,0 +1,17 @@
+{
+  "@@locale": "ml",
+  "appTitle": "Fixiva",
+  "tagline": "ഹോം സർവീസുകൾ",
+  "mobileLabel": "മൊബൈൽ നമ്പർ",
+  "sendOtp": "OTP അയയ്ക്കുക",
+  "verifyOtp": "OTP പരിശോധിക്കുക",
+  "otpLabel": "OTP",
+  "fullName": "പേര്",
+  "register": "രജിസ്റ്റർ",
+  "login": "ലോഗിൻ",
+  "bookAService": "സർവീസ് ബുക്ക് ചെയ്യുക",
+  "customerHome": "ബുക്കിംഗുകൾ",
+  "spHome": "ഓഫറുകൾ",
+  "partnerHome": "ഓപ്പറേഷൻസ്",
+  "masterHome": "പ്ലാറ്റ്‌ഫോം"
+}

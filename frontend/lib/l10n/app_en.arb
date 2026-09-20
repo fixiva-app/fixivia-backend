@@ -1,0 +1,17 @@
+{
+  "@@locale": "en",
+  "appTitle": "Fixiva",
+  "tagline": "Home services",
+  "mobileLabel": "Mobile number",
+  "sendOtp": "Send OTP",
+  "verifyOtp": "Verify OTP",
+  "otpLabel": "OTP",
+  "fullName": "Full name",
+  "register": "Register",
+  "login": "Log in",
+  "bookAService": "Book a Service",
+  "customerHome": "Bookings",
+  "spHome": "Offers",
+  "partnerHome": "Operations",
+  "masterHome": "Platform"
+}

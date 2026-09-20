@@ -1,0 +1,27 @@
+.DS_Store
+.env
+*.db
+fixvia.db
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.idea/
+.vscode/
+
+# Flutter
+frontend/.dart_tool/
+frontend/.packages
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.pub-cache/
+frontend/build/
+frontend/*.iml
+frontend/coverage/
+frontend/.metadata
