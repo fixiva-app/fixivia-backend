@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.analytics import router as analytics_router
 from app.api.auth import router as auth_router
+from app.api.dev import router as dev_router
 from app.api.bookings import router as bookings_router
 from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
@@ -37,6 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(health_router)
+app.include_router(dev_router)
 app.include_router(auth_router)
 app.include_router(me_router)
 app.include_router(partners_router)
