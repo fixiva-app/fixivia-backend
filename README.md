@@ -1,0 +1,20 @@
+# Fixvia backend
+
+FastAPI. SQLite file `fixvia.db` locally (Postgres URL later). Dispatch runs as FastAPI BackgroundTasks; `POST /v1/jobs/dispatch-repool` is the 3-hour job.
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements.txt
+pytest
+uvicorn app.main:app --reload --port 8080
+```
+
+Seeded OTP login mobiles (check console for codes):
+
+- `9000000001` Master Admin
+- `9000000002` Partner owner
+- `9000000003` Technician
+- `9000000004` Customer
+
+OTP prints as `[OTP] purpose=login ... code=......`

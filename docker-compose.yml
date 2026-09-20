@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: fixvia
+      POSTGRES_PASSWORD: fixvia
+      POSTGRES_DB: fixvia
+    ports:
+      - "5432:5432"
+    volumes:
+      - fixvia_pg:/var/lib/postgresql/data
+
+volumes:
+  fixvia_pg:
