@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../api/client.dart';
+import '../../core/booking_rules.dart';
 import '../../core/session.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/components/components.dart';
@@ -648,6 +649,14 @@ class _BookingDetailState extends State<_BookingDetail> {
                         ),
                       ],
                     ),
+                    if (forceAssignReady(b, DateTime.now())) ...[
+                      const SizedBox(height: 18),
+                      _ForceAssignCard(
+                        api: widget.api,
+                        bookingId: widget.id,
+                        onAssigned: () => setState(() => _reload += 1),
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     const Divider(height: 1),
                     const SizedBox(height: 14),
@@ -698,6 +707,125 @@ class _BookingDetailState extends State<_BookingDetail> {
       }
     } catch (e) {
       setState(() => _msg = e.toString());
+    }
+  }
+}
+
+/// Partner fallback: assign a technician after a failed 3h cycle.
+///
+/// Server is authoritative (partner roles only, same constraints as the
+/// dispatch pool, start-work OTP reused). Non-partners get 403 and the
+/// section hides itself.
+class _ForceAssignCard extends StatefulWidget {
+  const _ForceAssignCard({
+    required this.api,
+    required this.bookingId,
+    required this.onAssigned,
+  });
+
+  final ApiClient api;
+  final String bookingId;
+  final VoidCallback onAssigned;
+
+  @override
+  State<_ForceAssignCard> createState() => _ForceAssignCardState();
+}
+
+class _ForceAssignCardState extends State<_ForceAssignCard> {
+  String? _selected;
+  var _busy = false;
+  String? _msg;
+  var _reload = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      testId: 'partner_assign_section',
+      title: 'Assign technician',
+      child: FutureBuilder(
+        future: widget.api.get(
+          '/v1/bookings/${widget.bookingId}/assignable${_reload == 0 ? '' : '?r=$_reload'}',
+        ),
+        builder: (context, snap) {
+          if (snap.hasError) {
+            // Only partner roles may assign; hide for everyone else.
+            if ('${snap.error}'.contains('forbidden')) {
+              return const SizedBox.shrink();
+            }
+            return AppAlert(title: '${snap.error}', destructive: true);
+          }
+          if (!snap.hasData) {
+            return const LoadingSkeleton(rows: 2);
+          }
+          final data = snap.data as Map<String, dynamic>;
+          final techs = (data['technicians'] as List?) ?? [];
+          if (data['ready'] != true || techs.isEmpty) {
+            return const AppAlert(
+              title: 'No eligible technicians right now.',
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final t in techs)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AppChoice(
+                    label:
+                        '${t['name']} · ${t['jobs_in_slot']}/${t['slot_cap']} this slot',
+                    icon: Icons.handyman_rounded,
+                    selected: _selected == t['id'],
+                    testId: 'partner_assign_pick_${t['id']}',
+                    onTap: () => setState(() => _selected = t['id'] as String),
+                  ),
+                ),
+              if (_msg != null) ...[
+                const SizedBox(height: 8),
+                AppAlert(
+                  title: _msg!,
+                  destructive: _msg != 'ok',
+                  success: _msg == 'ok',
+                ),
+              ],
+              const SizedBox(height: 12),
+              AppButton(
+                text: 'Assign selected',
+                testId: 'partner_assign_confirm',
+                expands: false,
+                isLoading: _busy,
+                onPressed: _selected == null || _busy ? null : _assign,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _assign() async {
+    setState(() {
+      _busy = true;
+      _msg = null;
+    });
+    try {
+      await widget.api.post('/v1/bookings/${widget.bookingId}/force-assign', {
+        'service_partner_id': _selected,
+      });
+      if (mounted) {
+        setState(() {
+          _msg = 'ok';
+          _busy = false;
+          _reload += 1;
+        });
+        widget.onAssigned();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _msg = e.toString();
+          _busy = false;
+        });
+      }
     }
   }
 }

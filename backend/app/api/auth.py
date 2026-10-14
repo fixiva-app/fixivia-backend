@@ -11,13 +11,12 @@ from app.config import settings
 from app.db import get_db
 from app.domain.otp import OtpPurpose, make_challenge, verify_challenge
 from app.models import OtpChallengeRow, PartnerInvite, ServicePartnerProfile, User, utcnow
-from app.services.otp_sender import ConsoleOtpSender
+from app.services.otp_sender import default_otp_sender
 from app.services.serializers import user_public
 from app.services.tokens import ROLES, issue_token
 from app.domain.otp import hash_code
 
 router = APIRouter(prefix="/v1/otp", tags=["otp"])
-_sender = ConsoleOtpSender()
 
 
 class OtpRequest(BaseModel):
@@ -55,7 +54,7 @@ def request_otp(body: OtpRequest, db: Session = Depends(get_db)) -> dict:
             expires_at=challenge.expires_at,
         )
     )
-    _sender.send(body.purpose, body.mobile, code)
+    default_otp_sender().send(body.purpose, body.mobile, code)
     return {"sent": True}
 
 

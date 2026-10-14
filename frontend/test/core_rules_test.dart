@@ -30,6 +30,38 @@ void main() {
     expect(isServiceDateAllowed(DateTime(2026, 9, 5), now), isFalse);
   });
 
+  test('force-assign gate mirrors backend', () {
+    final now = DateTime(2026, 10, 15, 12, 0);
+    Map<String, dynamic> booking({
+      String status = 'open',
+      bool? ready,
+      int refreshes = 1,
+      DateTime? created,
+    }) => {
+      'status': status,
+      'force_assign_ready': ready,
+      'dispatch_refresh_count': refreshes,
+      'created_at': (created ?? now).toIso8601String(),
+    };
+    // server flag wins
+    expect(forceAssignReady(booking(ready: true), now), isTrue);
+    // fresh open booking: strict first-accept, no assign UI
+    expect(forceAssignReady(booking(), now), isFalse);
+    // stale by age
+    expect(
+      forceAssignReady(
+        booking(created: now.subtract(const Duration(hours: 3, minutes: 1))),
+        now,
+      ),
+      isTrue,
+    );
+    // stale by refresh count
+    expect(forceAssignReady(booking(refreshes: 2), now), isTrue);
+    // never for non-open
+    expect(forceAssignReady(booking(status: 'assigned', ready: true), now), isFalse);
+    expect(forceAssignReady(booking(status: 'completed', refreshes: 5), now), isFalse);
+  });
+
   test('shell routing by role', () {
     final api = ApiClient(baseUrl: 'http://localhost');
     Widget shell(UserRole role) => shellFor(

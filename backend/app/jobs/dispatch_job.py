@@ -47,15 +47,8 @@ def partner_admins(db: Session, partner_id: str) -> list[User]:
     )
 
 
-def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) -> dict:
-    booking = db.get(Booking, booking_id)
-    if booking is None or booking.status != "open":
-        return {"skipped": True}
-    partner = db.get(Partner, booking.partner_id)
-    if partner is None or partner.status != "approved":
-        booking.pool_empty = True
-        return {"empty": True, "reason": "partner"}
-
+def eligible_technicians(db: Session, booking: Booking) -> list[dict]:
+    """Pool-eligible SPs for a booking. Shared by dispatch and force-assign."""
     excluded = {
         row.service_partner_id
         for row in db.scalars(select(BookingExclusion).where(BookingExclusion.booking_id == booking.id))
@@ -68,7 +61,7 @@ def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) ->
             )
         )
     )
-    offered: list[str] = []
+    out: list[dict] = []
     for profile in profiles:
         user = db.get(User, profile.user_id)
         if user is None or user.status != "active":
@@ -95,6 +88,23 @@ def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) ->
         )
         if not ok:
             continue
+        out.append({"user": user, "jobs_in_slot": jobs})
+    return out
+
+
+def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) -> dict:
+    booking = db.get(Booking, booking_id)
+    if booking is None or booking.status != "open":
+        return {"skipped": True}
+    partner = db.get(Partner, booking.partner_id)
+    if partner is None or partner.status != "approved":
+        booking.pool_empty = True
+        return {"empty": True, "reason": "partner"}
+
+    offered: list[str] = []
+    for entry in eligible_technicians(db, booking):
+        user = entry["user"]
+        jobs = entry["jobs_in_slot"]
         existing = db.get(BookingOffer, (booking.id, user.id))
         if existing:
             existing.last_notified_at = utcnow()
