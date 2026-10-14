@@ -21,7 +21,8 @@ Seeded OTP login mobiles (check console for codes):
 If the database already existed before partner-admin was added, inject one of each role (dev only, safe to re-run):
 
 ```bash
-python -m app.dev_users
+./scripts/inject-dev-users.sh
+# or: python -m app.dev_users
 # or POST http://127.0.0.1:8080/v1/dev/inject-users
 ```
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 
+import '../app_theme.dart';
 import 'app_test_id.dart';
 
 class AppSelectItem<T> {
@@ -10,7 +10,7 @@ class AppSelectItem<T> {
   final String label;
 }
 
-/// In-house select. Wraps [ShadSelect].
+/// In-house select styled like [AppInputField].
 class AppSelect<T> extends StatelessWidget {
   const AppSelect({
     required this.testId,
@@ -33,7 +33,7 @@ class AppSelect<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return AppTestId(
       testId: testId,
       child: Column(
@@ -41,27 +41,71 @@ class AppSelect<T> extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (label != null) ...[
-            Text(label!, style: theme.textTheme.small),
-            const SizedBox(height: 6),
+            Text(label!, style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 7),
           ],
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth.isFinite
-                  ? constraints.maxWidth
-                  : 320.0;
-              return ShadSelect<T>(
-                minWidth: width,
-                maxWidth: width,
-                initialValue: initialValue,
-                placeholder: placeholder == null ? null : Text(placeholder!),
-                onChanged: onChanged,
-                selectedOptionBuilder: selectedOptionBuilder,
-                options: [
-                  for (final item in items)
-                    ShadOption(value: item.value, child: Text(item.label)),
-                ],
-              );
-            },
+          DropdownButtonFormField<T>(
+            initialValue: initialValue,
+            onChanged: onChanged,
+            menuMaxHeight: 320,
+            icon: const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: AppColors.brightOrange,
+            ),
+            dropdownColor: AppColors.surfaceOf(context),
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: AppColors.inkOf(context),
+            ),
+            decoration: InputDecoration(
+              hintText: placeholder,
+              hintStyle: TextStyle(color: AppColors.subOf(context)),
+              filled: true,
+              fillColor: dark
+                  ? AppColors.charcoalSoft.withValues(alpha: 0.6)
+                  : AppColors.white,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 13,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                borderSide: BorderSide(color: AppColors.lineOf(context)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                borderSide: BorderSide(color: AppColors.lineOf(context)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                borderSide: const BorderSide(
+                  color: AppColors.brightOrange,
+                  width: 1.6,
+                ),
+              ),
+            ),
+            selectedItemBuilder: (context) => [
+              for (final item in items)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: selectedOptionBuilder(context, item.value),
+                ),
+            ],
+            items: [
+              for (final item in items)
+                DropdownMenuItem<T>(
+                  value: item.value,
+                  child: Text(
+                    item.label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkOf(context),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),

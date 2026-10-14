@@ -41,13 +41,9 @@ class _FixviaAppState extends State<FixviaApp> {
         return MaterialApp(
           title: 'Fixiva',
           locale: widget.locale,
-          theme: Theme.of(context).copyWith(
-            scaffoldBackgroundColor: AppColors.lightGray,
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: AppColors.deepOrange,
-              secondary: AppColors.warmOrange,
-            ),
-          ),
+          theme: buildAppTheme(Brightness.light),
+          darkTheme: buildAppTheme(Brightness.dark),
+          themeMode: widget.themeMode,
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalShadLocalizations.delegate,

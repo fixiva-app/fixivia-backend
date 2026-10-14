@@ -131,82 +131,117 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final compact = appIsCompact(context);
+    if (compact) return _compact();
     return Scaffold(
       backgroundColor: AppColors.lightGray,
-      body: compact
-          ? SafeArea(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      body: Row(
+        children: [
+          const Expanded(flex: 5, child: _BrandPane()),
+          Expanded(
+            flex: 6,
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 48,
+                  vertical: 40,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: _formCard(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _compact() {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      backgroundColor: AppColors.lightGray,
+      body: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 56),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.charcoalDeep,
+                    AppColors.charcoal,
+                    AppColors.ember,
+                    AppColors.deepOrange,
+                  ],
+                  stops: [0.0, 0.42, 0.78, 1.0],
+                ),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(32),
+                ),
+              ),
+              child: Stack(
                 children: [
-                  const Center(child: FxLogo(height: 36)),
-                  const SizedBox(height: 28),
-                  _AuthFormCard(
-                    register: _register,
-                    sent: _sent,
-                    busy: _busy,
-                    role: _role,
-                    partnerId: _partnerId,
-                    partners: _partners,
-                    error: _error,
-                    errorText: _error == null ? null : _errorText,
-                    name: _name,
-                    mobile: _mobile,
-                    otp: _otp,
-                    onMode: _setMode,
-                    onCustomer: () => setState(() => _role = 'customer'),
-                    onServicePartner: _pickServicePartner,
-                    onPartnerChanged: (id) => setState(() => _partnerId = id),
-                    onSubmit: _busy ? null : (_sent ? _verify : _send),
-                    devAccounts: _devAccounts,
-                    onDevLogin: widget.onAuthenticated,
+                  const Positioned.fill(child: FxRings(opacity: 0.18)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const FxLogo(white: true, height: 34),
+                      const SizedBox(height: 18),
+                      Text(
+                        l10n.appTitle,
+                        style: Theme.of(context).textTheme.displaySmall
+                            ?.copyWith(color: AppColors.white, fontSize: 36),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        l10n.authWelcome,
+                        style: const TextStyle(
+                          color: Color(0xE6FFFFFF),
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            )
-          : Row(
-              children: [
-                const Expanded(flex: 5, child: _BrandPane()),
-                Expanded(
-                  flex: 6,
-                  child: ColoredBox(
-                    color: AppColors.lightGray,
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 48,
-                          vertical: 40,
-                        ),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 440),
-                          child: _AuthFormCard(
-                            register: _register,
-                            sent: _sent,
-                            busy: _busy,
-                            role: _role,
-                            partnerId: _partnerId,
-                            partners: _partners,
-                            error: _error,
-                            errorText: _error == null ? null : _errorText,
-                            name: _name,
-                            mobile: _mobile,
-                            otp: _otp,
-                            onMode: _setMode,
-                            onCustomer: () =>
-                                setState(() => _role = 'customer'),
-                            onServicePartner: _pickServicePartner,
-                            onPartnerChanged: (id) =>
-                                setState(() => _partnerId = id),
-                            onSubmit: _busy ? null : (_sent ? _verify : _send),
-                            devAccounts: _devAccounts,
-                            onDevLogin: widget.onAuthenticated,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+              child: Transform.translate(
+                offset: const Offset(0, -32),
+                child: _formCard(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _formCard() {
+    return _AuthFormCard(
+      register: _register,
+      sent: _sent,
+      busy: _busy,
+      role: _role,
+      partnerId: _partnerId,
+      partners: _partners,
+      error: _error,
+      errorText: _error == null ? null : _errorText,
+      name: _name,
+      mobile: _mobile,
+      otp: _otp,
+      onMode: _setMode,
+      onCustomer: () => setState(() => _role = 'customer'),
+      onServicePartner: _pickServicePartner,
+      onPartnerChanged: (id) => setState(() => _partnerId = id),
+      onSubmit: _busy ? null : (_sent ? _verify : _send),
+      devAccounts: _devAccounts,
+      onDevLogin: widget.onAuthenticated,
     );
   }
 
@@ -228,46 +263,121 @@ class _BrandPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    const muted = Color(0xE6FFFFFF);
     return DecoratedBox(
-      decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(48, 48, 48, 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const FxLogo(white: true, height: 40),
-              const Spacer(),
-              Text(
-                l10n.appTitle,
-                style: const TextStyle(
-                  color: AppColors.white,
-                  fontSize: 42,
-                  fontWeight: FontWeight.w700,
-                  height: 1.1,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                l10n.authWelcome,
-                style: const TextStyle(color: muted, fontSize: 18, height: 1.4),
-              ),
-              const SizedBox(height: 36),
-              _BrandPoint(text: l10n.authBrandPoint1),
-              const SizedBox(height: 14),
-              _BrandPoint(text: l10n.authBrandPoint2),
-              const SizedBox(height: 14),
-              _BrandPoint(text: l10n.authBrandPoint3),
-              const Spacer(),
-              Text(
-                l10n.tagline,
-                style: const TextStyle(color: muted, fontSize: 14),
-              ),
-            ],
-          ),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.charcoalDeep,
+            AppColors.charcoal,
+            AppColors.ember,
+            AppColors.deepOrange,
+          ],
+          stops: [0.0, 0.42, 0.78, 1.0],
         ),
       ),
+      child: Stack(
+        children: [
+          const Positioned.fill(child: FxRings(opacity: 0.16)),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(52, 44, 52, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FxLogo(white: true, height: 40),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.white.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
+                      border: Border.all(
+                        color: AppColors.white.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Text(
+                      l10n.tagline,
+                      style: const TextStyle(
+                        color: AppColors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.appTitle,
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      color: AppColors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    l10n.authWelcome,
+                    style: const TextStyle(
+                      color: Color(0xE6FFFFFF),
+                      fontSize: 17,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  _BrandPoint(text: l10n.authBrandPoint1),
+                  const SizedBox(height: 12),
+                  _BrandPoint(text: l10n.authBrandPoint2),
+                  const SizedBox(height: 12),
+                  _BrandPoint(text: l10n.authBrandPoint3),
+                  const Spacer(),
+                  const Wrap(
+                    spacing: 26,
+                    runSpacing: 12,
+                    children: [
+                      _MiniStat(value: '2', label: 'slots / day'),
+                      _MiniStat(value: 'OTP', label: 'verified work'),
+                      _MiniStat(value: '#1', label: 'first-accept wins'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.white.withValues(alpha: 0.75),
+            fontSize: 12,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -279,31 +389,42 @@ class _BrandPoint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 22,
-          height: 22,
-          margin: const EdgeInsets.only(top: 1),
-          decoration: BoxDecoration(
-            color: AppColors.white.withValues(alpha: 0.18),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.check, size: 14, color: AppColors.white),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: AppColors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        border: Border.all(color: AppColors.white.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: const BoxDecoration(
               color: AppColors.white,
-              fontSize: 15,
-              height: 1.4,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              size: 15,
+              color: AppColors.deepOrange,
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.white,
+                fontSize: 14.5,
+                fontWeight: FontWeight.w500,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -361,26 +482,21 @@ class _AuthFormCard extends StatelessWidget {
       width: double.infinity,
       child: AppCard(
         testId: 'auth_form_card',
+        padding: const EdgeInsets.all(28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppColors.charcoal,
-              ),
-            ),
+            Text(title, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
               subtitle,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF737373),
-                height: 1.4,
+                color: AppColors.muted,
+                height: 1.45,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 22),
             _ModeToggle(
               register: register,
               loginLabel: l10n.login,
@@ -388,19 +504,26 @@ class _AuthFormCard extends StatelessWidget {
               onChanged: onMode,
             ),
             if (register) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
+              Text(
+                'I am joining as',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
                   AppChoice(
                     label: l10n.authRoleCustomer,
+                    icon: Icons.home_rounded,
                     selected: role == 'customer',
                     testId: 'auth_register_role_customer',
                     onTap: onCustomer,
                   ),
                   AppChoice(
                     label: l10n.authRoleSp,
+                    icon: Icons.handyman_rounded,
                     selected: role == 'service_partner',
                     testId: 'auth_register_role_sp',
                     onTap: onServicePartner,
@@ -408,7 +531,7 @@ class _AuthFormCard extends StatelessWidget {
                 ],
               ),
               if (role == 'service_partner' && partners.isNotEmpty) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 AppSelect<String>(
                   testId: 'auth_register_partner',
                   label: l10n.authPartnerLabel,
@@ -432,7 +555,7 @@ class _AuthFormCard extends StatelessWidget {
                   onChanged: onPartnerChanged,
                 ),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               AppInputField(
                 label: l10n.fullName,
                 placeholder: l10n.fullName,
@@ -440,26 +563,24 @@ class _AuthFormCard extends StatelessWidget {
                 controller: name,
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             AppInputField(
               label: l10n.mobileLabel,
               placeholder: '9000000001',
               testId: 'auth_login_mobile',
               controller: mobile,
               keyboardType: TextInputType.phone,
-              leading: const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Text(
-                  '+91',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.charcoal,
-                  ),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              leading: const Text(
+                '+91',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.charcoal,
                 ),
               ),
             ),
             if (sent) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               AppInputField(
                 testId: 'auth_login_otp_input',
                 controller: otp,
@@ -471,20 +592,23 @@ class _AuthFormCard extends StatelessWidget {
               ),
             ],
             if (error != null && errorText != null) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               AppAlert(title: errorText!(l10n), destructive: true),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 22),
             AppButton(
               text: sent ? l10n.verifyOtp : l10n.sendOtp,
               testId: sent ? 'auth_login_verify' : 'auth_login_send_otp',
               onPressed: onSubmit,
               isLoading: busy,
               expands: true,
+              size: AppButtonSize.lg,
               showArrow: !busy,
             ),
             if (kDebugMode && devAccounts.isNotEmpty) ...[
               const SizedBox(height: 20),
+              const Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: 12),
               const Text(
                 'Dev only — enter as',
                 style: TextStyle(fontSize: 12, color: Color(0xFF737373)),
@@ -529,36 +653,76 @@ class _ModeToggle extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.lightGray,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
       ),
       child: Padding(
         padding: const EdgeInsets.all(4),
         child: Row(
           children: [
             Expanded(
-              child: AppButton(
-                text: registerLabel,
+              child: _Segment(
+                label: registerLabel,
+                selected: register,
                 testId: 'auth_mode_register',
-                variant: register
-                    ? AppButtonVariant.primary
-                    : AppButtonVariant.ghost,
-                expands: true,
-                onPressed: () => onChanged(true),
+                onTap: () => onChanged(true),
               ),
             ),
             const SizedBox(width: 4),
             Expanded(
-              child: AppButton(
-                text: loginLabel,
+              child: _Segment(
+                label: loginLabel,
+                selected: !register,
                 testId: 'auth_mode_login',
-                variant: register
-                    ? AppButtonVariant.ghost
-                    : AppButtonVariant.primary,
-                expands: true,
-                onPressed: () => onChanged(false),
+                onTap: () => onChanged(false),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({
+    required this.label,
+    required this.selected,
+    required this.testId,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final String testId;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppTestId(
+      testId: testId,
+      child: GestureDetector(
+        onTap: onTap,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            decoration: BoxDecoration(
+              gradient: selected ? AppColors.primaryGradient : null,
+              color: selected ? null : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+              boxShadow: selected ? AppShadows.glowSoft : const [],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.white : AppColors.muted,
+              ),
+            ),
+          ),
         ),
       ),
     );

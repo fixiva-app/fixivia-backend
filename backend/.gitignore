@@ -1,0 +1,16 @@
+.DS_Store
+.env
+*.db
+fixvia.db
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.idea/
+.vscode/
