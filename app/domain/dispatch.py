@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 OPEN = "open"
 ASSIGNED = "assigned"
 ALREADY_TAKEN = "already_taken"
 DECLINED = "declined"
 DROPPED = "dropped"
+
+# Partner fallback: strict first-accept rules until one full 3h window has
+# passed with no accept (or two pools ran and the booking is still open).
+FORCE_ASSIGN_AFTER_HOURS = 3
+FORCE_ASSIGN_MIN_REFRESHES = 2
 
 
 @dataclass(frozen=True)
@@ -41,3 +47,25 @@ def accept_lock(current_status: str) -> str:
 
 def next_pool_excludes(reason: str) -> bool:
     return reason in {DECLINED, DROPPED}
+
+
+def force_assign_ready(
+    status: str,
+    created_at: datetime | None,
+    dispatch_refresh_count: int,
+    now: datetime | None = None,
+) -> bool:
+    """Partner fallback gate: only a stale open booking may be force-assigned.
+
+    Ready when the booking is still open and either a full 3h window has
+    elapsed since creation or two dispatch pools ran with no accept.
+    """
+    if status != OPEN:
+        return False
+    if (dispatch_refresh_count or 0) >= FORCE_ASSIGN_MIN_REFRESHES:
+        return True
+    if created_at is None:
+        return False
+    moment = now or datetime.now(timezone.utc)
+    start = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+    return (moment - start) >= timedelta(hours=FORCE_ASSIGN_AFTER_HOURS)

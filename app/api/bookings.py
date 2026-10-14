@@ -12,9 +12,9 @@ from app.config import settings
 from app.db import SessionLocal, get_db
 from app.deps import current_user, require_roles
 from app.domain.booking_rules import is_service_date_allowed
-from app.domain.dispatch import ALREADY_TAKEN, ASSIGNED, accept_lock
+from app.domain.dispatch import ALREADY_TAKEN, ASSIGNED, accept_lock, force_assign_ready
 from app.domain.otp import generate_code, hash_code, reuse_start_work_otp
-from app.jobs.dispatch_job import dispatch_pool, slot_job_count
+from app.jobs.dispatch_job import dispatch_pool, eligible_technicians, slot_job_count
 from app.models import (
     Booking,
     BookingComplaint,
@@ -31,13 +31,12 @@ from app.models import (
     User,
     utcnow,
 )
-from app.services.notify import notify
-from app.services.otp_sender import ConsoleOtpSender
+from app.services.notify import audit, notify
+from app.services.otp_sender import default_otp_sender
 from app.services.serializers import mask_mobile
 from app.domain.otp import OtpPurpose
 
 router = APIRouter(prefix="/v1", tags=["bookings"])
-_otp = ConsoleOtpSender()
 
 
 def _enqueue_pool(booking_id: str) -> None:
@@ -220,6 +219,16 @@ def accept_booking(
     if result.rowcount != 1:
         raise HTTPException(409, ALREADY_TAKEN)
     db.refresh(b)
+    _finalize_assignment(db, b, user)
+    return _booking_json(db, b, user)
+
+
+def _finalize_assignment(db: Session, b: Booking, sp_user: User, actor: User | None = None) -> None:
+    """Timestamps + start-work OTP (generate once, reuse on reassign) + fan-out.
+
+    Shared by first-accept and partner force-assign so both paths notify
+    and reuse the OTP identically.
+    """
     now = utcnow()
     if b.first_accepted_at is None:
         b.first_accepted_at = now
@@ -230,15 +239,102 @@ def accept_booking(
         code = generate_code()
         b.start_work_otp_hash = hash_code(code, settings.otp_pepper)
         b.start_work_otp_created_at = now
-        _otp.send(OtpPurpose.START_WORK, customer.mobile if customer else "", code, meta=f"booking_id={b.id}")
+        default_otp_sender().send(
+            OtpPurpose.START_WORK, customer.mobile if customer else "", code, meta=f"booking_id={b.id}"
+        )
     else:
         print(f"[OTP] purpose=start_work REUSE booking_id={b.id} (same code as first accept)", flush=True)
-    notify(db, b.customer_id, "booking_confirmed", b.id, technician=user.full_name)
+    notify(db, b.customer_id, "booking_confirmed", b.id, technician=sp_user.full_name)
     for admin in db.scalars(select(User).where(User.partner_id == b.partner_id, User.role.in_(("partner_owner", "partner_admin")))):
         notify(db, admin.id, "filled", b.id)
-    others = db.scalars(select(BookingOffer).where(BookingOffer.booking_id == b.id, BookingOffer.service_partner_id != user.id))
+    others = db.scalars(select(BookingOffer).where(BookingOffer.booking_id == b.id, BookingOffer.service_partner_id != sp_user.id))
     for o in others:
         notify(db, o.service_partner_id, "already_taken", b.id)
+    if actor is not None:
+        audit(db, actor.id, "force_assign", "booking", b.id, service_partner_id=sp_user.id)
+
+
+def _assignable_payload(db: Session, b: Booking) -> dict:
+    ready = force_assign_ready(b.status, b.created_at, b.dispatch_refresh_count or 0)
+    techs = []
+    if ready:
+        for entry in eligible_technicians(db, b):
+            sp = entry["user"]
+            techs.append(
+                {
+                    "id": sp.id,
+                    "name": sp.full_name,
+                    "mobile_masked": mask_mobile(sp.mobile),
+                    "jobs_in_slot": entry["jobs_in_slot"],
+                    "slot_cap": 5,
+                }
+            )
+    reason = None
+    if b.status != "open":
+        reason = "not_open"
+    elif not ready:
+        reason = "too_early"
+    elif not techs:
+        reason = "pool_empty"
+    return {"ready": ready and b.status == "open", "reason": reason, "technicians": techs}
+
+
+@router.get("/bookings/{booking_id}/assignable")
+def assignable_technicians(
+    booking_id: str,
+    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    db: Session = Depends(get_db),
+) -> dict:
+    b = db.get(Booking, booking_id)
+    if b is None:
+        raise HTTPException(404, "not_found")
+    if b.partner_id != user.partner_id:
+        raise HTTPException(403, "forbidden")
+    return _assignable_payload(db, b)
+
+
+class ForceAssignBody(BaseModel):
+    service_partner_id: str
+
+
+@router.post("/bookings/{booking_id}/force-assign")
+def force_assign_booking(
+    booking_id: str,
+    body: ForceAssignBody,
+    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Partner fallback after a failed 3h cycle. Strict first-accept before that.
+
+    The target must satisfy the same pool constraints (partner, category,
+    pincode, slot capacity, no decline/drop, no availability block).
+    """
+    b = db.get(Booking, booking_id)
+    if b is None:
+        raise HTTPException(404, "not_found")
+    if b.partner_id != user.partner_id:
+        raise HTTPException(403, "forbidden")
+    if b.status != "open":
+        raise HTTPException(409, "already_assigned")
+    if not force_assign_ready(b.status, b.created_at, b.dispatch_refresh_count or 0):
+        raise HTTPException(409, "too_early")
+    sp = db.get(User, body.service_partner_id)
+    if sp is None or sp.role != "service_partner":
+        raise HTTPException(404, "sp_not_found")
+    if sp.partner_id != b.partner_id:
+        raise HTTPException(400, "sp_ineligible")
+    ids = {entry["user"].id for entry in eligible_technicians(db, b)}
+    if sp.id not in ids:
+        raise HTTPException(400, "sp_ineligible")
+    result = db.execute(
+        update(Booking)
+        .where(Booking.id == booking_id, Booking.status == "open")
+        .values(status="assigned", assigned_sp_id=sp.id, assigned_at=utcnow())
+    )
+    if result.rowcount != 1:
+        raise HTTPException(409, ALREADY_TAKEN)
+    db.refresh(b)
+    _finalize_assignment(db, b, sp, actor=user)
     return _booking_json(db, b, user)
 
 
@@ -416,6 +512,8 @@ def _booking_json(db: Session, b: Booking, viewer: User) -> dict:
         "partner_id": b.partner_id,
         "customer_id": b.customer_id,
         "pool_empty": b.pool_empty,
+        "dispatch_refresh_count": b.dispatch_refresh_count or 0,
+        "force_assign_ready": force_assign_ready(b.status, b.created_at, b.dispatch_refresh_count or 0),
         "created_at": b.created_at.isoformat() if b.created_at else None,
         "first_accepted_at": b.first_accepted_at.isoformat() if b.first_accepted_at else None,
         "payment_mode": b.payment_mode,

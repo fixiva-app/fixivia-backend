@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     otp_pepper: str = "dev-only-otp-pepper"
     database_url: str = "sqlite+pysqlite:///./fixvia.db"
     seed_on_start: bool = True
+    whatsapp_enabled: bool = False
+    whatsapp_api_base: str = ""
+    whatsapp_api_key: str = ""
+    whatsapp_sender: str = ""
 
 
 settings = Settings()

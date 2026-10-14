@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta, timezone
+
 from app.domain.dispatch import (
     ALREADY_TAKEN,
     ASSIGNED,
     TechnicianEligibility,
     accept_lock,
+    force_assign_ready,
     is_eligible,
     next_pool_excludes,
 )
@@ -40,3 +43,20 @@ def test_decliners_and_droppers_excluded():
     assert next_pool_excludes("declined")
     assert next_pool_excludes("dropped")
     assert not next_pool_excludes("timeout")
+
+
+def test_force_assign_gate():
+    now = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
+    fresh = now - timedelta(minutes=10)
+    stale = now - timedelta(hours=3, minutes=1)
+    boundary = now - timedelta(hours=3)
+    # strict first-accept until a full 3h window passes
+    assert not force_assign_ready("open", fresh, 1, now)
+    assert force_assign_ready("open", stale, 1, now)
+    assert force_assign_ready("open", boundary, 1, now)
+    # or two pools ran with no accept
+    assert force_assign_ready("open", fresh, 2, now)
+    assert force_assign_ready("open", None, 2, now)
+    # never for non-open bookings
+    assert not force_assign_ready("assigned", stale, 5, now)
+    assert not force_assign_ready("completed", stale, 5, now)
