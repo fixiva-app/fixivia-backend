@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -185,8 +186,7 @@ def _mini(b: Booking) -> dict:
 
 @router.get("/sp/earnings")
 def earnings(user: User = Depends(require_roles("service_partner")), db: Session = Depends(get_db)) -> dict:
-    from decimal import Decimal
-
+    rows = list(db.scalars(select(PayoutLedger).where(PayoutLedger.service_partner_id == user.id)))
     pending = Decimal("0")
     paid = Decimal("0")
     for r in rows:
