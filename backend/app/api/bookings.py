@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import SessionLocal, get_db
+from app.db import CommitRoute, SessionLocal, get_db
 from app.deps import current_user, require_roles
 from app.domain.booking_rules import is_service_date_allowed
 from app.domain.dispatch import ALREADY_TAKEN, ASSIGNED, accept_lock, force_assign_ready
@@ -36,7 +36,7 @@ from app.services.otp_sender import default_otp_sender
 from app.services.serializers import mask_mobile
 from app.domain.otp import OtpPurpose
 
-router = APIRouter(prefix="/v1", tags=["bookings"])
+router = APIRouter(prefix="/v1", tags=["bookings"], route_class=CommitRoute)
 
 
 def _enqueue_pool(booking_id: str) -> None:
@@ -163,7 +163,11 @@ def list_bookings(
     if user.role == "customer":
         q = q.where(Booking.customer_id == user.id)
     elif user.role == "service_partner":
-        q = q.where((Booking.assigned_sp_id == user.id) | (Booking.id.in_(select(BookingOffer.booking_id).where(BookingOffer.service_partner_id == user.id))))
+        declined = select(BookingExclusion.booking_id).where(BookingExclusion.service_partner_id == user.id)
+        offered = select(BookingOffer.booking_id).where(
+            BookingOffer.service_partner_id == user.id, BookingOffer.booking_id.not_in(declined)
+        )
+        q = q.where((Booking.assigned_sp_id == user.id) | (Booking.id.in_(offered)))
     elif user.role in ("partner_owner", "partner_admin"):
         q = q.where(Booking.partner_id == user.partner_id)
     elif user.role != "master_admin":
@@ -185,7 +189,12 @@ def get_booking(booking_id: str, user: User = Depends(current_user), db: Session
 
 @router.get("/offers")
 def my_offers(user: User = Depends(require_roles("service_partner")), db: Session = Depends(get_db)) -> list[dict]:
-    offers = db.scalars(select(BookingOffer).where(BookingOffer.service_partner_id == user.id))
+    declined = select(BookingExclusion.booking_id).where(BookingExclusion.service_partner_id == user.id)
+    offers = db.scalars(
+        select(BookingOffer).where(
+            BookingOffer.service_partner_id == user.id, BookingOffer.booking_id.not_in(declined)
+        )
+    )
     out = []
     for o in offers:
         b = db.get(Booking, o.booking_id)

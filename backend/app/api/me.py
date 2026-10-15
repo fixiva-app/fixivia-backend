@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import CommitRoute, get_db
 from app.deps import current_user
 from app.jobs.dispatch_job import dispatch_repool_open
 from app.models import Notification, User
 from app.services.serializers import user_public
 
-router = APIRouter(prefix="/v1", tags=["me"])
+router = APIRouter(prefix="/v1", tags=["me"], route_class=CommitRoute)
 
 
 @router.get("/me")

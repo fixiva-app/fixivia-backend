@@ -8,15 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import CommitRoute, get_db
 from app.domain.otp import OtpPurpose, make_challenge, verify_challenge
-from app.models import OtpChallengeRow, PartnerInvite, ServicePartnerProfile, User, utcnow
+from app.models import OtpChallengeRow, PartnerInvite, ServicePartnerProfile, User, as_utc_aware, utcnow
 from app.services.otp_sender import default_otp_sender
 from app.services.serializers import user_public
 from app.services.tokens import ROLES, issue_token
 from app.domain.otp import hash_code
 
-router = APIRouter(prefix="/v1/otp", tags=["otp"])
+router = APIRouter(prefix="/v1/otp", tags=["otp"], route_class=CommitRoute)
 
 
 class OtpRequest(BaseModel):
@@ -101,8 +101,10 @@ def verify_otp(body: OtpVerify, db: Session = Depends(get_db)) -> dict:
                 raise HTTPException(400, "invite_required")
             token_h = hash_code(body.invite_token, settings.otp_pepper)
             invite = db.scalar(select(PartnerInvite).where(PartnerInvite.token_hash == token_h))
-            if invite is None or invite.used_by_partner_id or invite.expires_at < utcnow():
+            if invite is None or as_utc_aware(invite.expires_at) < utcnow():
                 raise HTTPException(400, "invite_invalid")
+            if not invite.used_by_partner_id:
+                raise HTTPException(400, "apply_first")
             partner_id = invite.used_by_partner_id
         user = User(
             role=role,
@@ -126,7 +128,7 @@ def verify_otp(body: OtpVerify, db: Session = Depends(get_db)) -> dict:
                 from app.models import Partner
 
                 partner = db.get(Partner, invite.used_by_partner_id) if invite.used_by_partner_id else None
-                if partner:
+                if partner and partner.primary_owner_user_id is None:
                     partner.primary_owner_user_id = user.id
     elif not user:
         raise HTTPException(404, "user_not_found")

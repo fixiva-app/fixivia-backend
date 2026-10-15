@@ -3,8 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.config import settings
+from app.db import CommitRoute
 
-router = APIRouter()
+router = APIRouter(route_class=CommitRoute)
 
 
 @router.get("/health")

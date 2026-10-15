@@ -23,6 +23,11 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def as_utc_aware(dt: datetime) -> datetime:
+    """Normalize a stored datetime for comparison. SQLite drops tzinfo."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 def new_id() -> str:
     return str(uuid.uuid4())
 
