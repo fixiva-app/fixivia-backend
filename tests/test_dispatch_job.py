@@ -2,7 +2,7 @@
 
 import itertools
 import sqlite3
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -318,6 +318,34 @@ def test_pool_exception_rolls_back(db, monkeypatch):
         dispatch_pool(db, bid)
     assert list(db.scalars(
         select(BookingOffer).where(BookingOffer.booking_id == bid))) == []
+
+
+def _offer_stamp(db, bid, sp_id):
+    row = db.execute(
+        select(BookingOffer.offered_at, BookingOffer.last_notified_at).where(
+            BookingOffer.booking_id == bid,
+            BookingOffer.service_partner_id == sp_id,
+        )
+    ).one()
+    return row[0].replace(tzinfo=None), row[1].replace(tzinfo=None)
+
+
+def test_repool_refreshes_offer_stamp_keeps_offered_at(db, monkeypatch):
+    """Merged upsert: re-pool bumps last_notified_at, never offered_at."""
+    partner, _, _, cust, cat = _staffed(db)
+    sp = _sp(db, partner, cat.id, "682001")
+    bid = _booking(db, partner, cust, cat).id
+    t0 = datetime(2027, 2, 1, 10, 0, tzinfo=timezone.utc)
+    t1 = datetime(2027, 2, 1, 13, 0, tzinfo=timezone.utc)
+    clock = iter([t0, t1])
+    monkeypatch.setattr(dj, "utcnow", lambda: next(clock))
+    dispatch_pool(db, bid)
+    offered_at, first = _offer_stamp(db, bid, sp.id)
+    assert first == t0.replace(tzinfo=None)
+    dispatch_pool(db, bid, admin_reminder=True)
+    offered_again, second = _offer_stamp(db, bid, sp.id)
+    assert second == t1.replace(tzinfo=None)
+    assert offered_again == offered_at
 
 
 def test_repool_open_fanout(db):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import urllib.request
 
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -117,13 +118,17 @@ def get_notification_channel() -> NotificationChannel:
 
 
 def notify(db: Session, user_id: str, ntype: str, booking_id: str | None = None, **payload) -> None:
-    row = Notification(
-        user_id=user_id,
-        type=ntype,
-        booking_id=booking_id,
-        payload=json.dumps(payload),
+    # Core insert (not ORM add): identical row — id/created_at client-side
+    # defaults still fire — but without per-row unit-of-work overhead. A
+    # repool sweep writes tens of thousands of these.
+    db.execute(
+        insert(Notification).values(
+            user_id=user_id,
+            type=ntype,
+            booking_id=booking_id,
+            payload=json.dumps(payload),
+        )
     )
-    db.add(row)
     try:
         user = db.get(User, user_id)
         get_notification_channel().send(
