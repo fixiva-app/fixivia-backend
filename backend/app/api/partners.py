@@ -158,6 +158,7 @@ def review_partner(
         )
     partner.status = body.status
     audit(db, user.id, "partner_review", "partner", partner.id, status=body.status)
+    db.flush()
     return _partner_json(partner, db)
 
 
