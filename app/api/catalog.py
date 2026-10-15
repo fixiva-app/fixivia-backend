@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import CommitRoute, get_db
 from app.deps import current_user, require_roles
 from app.models import (
     CategoryIssueTemplate,
@@ -17,7 +17,7 @@ from app.models import (
 )
 from app.services.notify import audit
 
-router = APIRouter(prefix="/v1", tags=["catalog"])
+router = APIRouter(prefix="/v1", tags=["catalog"], route_class=CommitRoute)
 
 
 def _cat_json(c: ServiceCategory, db: Session) -> dict:
@@ -100,6 +100,7 @@ def create_category(
     db.flush()
     _replace_problems(db, c.id, body.problems)
     audit(db, user.id, "category_create", "category", c.id)
+    db.flush()
     return _cat_json(c, db)
 
 
@@ -122,6 +123,7 @@ def update_category(
     db.flush()
     _replace_problems(db, cat_id, body.problems)
     audit(db, user.id, "category_update", "category", cat_id)
+    db.flush()
     return _cat_json(c, db)
 
 

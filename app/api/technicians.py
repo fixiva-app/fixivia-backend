@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import CommitRoute, get_db
 from app.deps import current_user, require_roles
 from app.models import (
     AvailabilityBlock,
@@ -24,7 +24,7 @@ from app.models import (
 )
 from app.services.notify import audit
 
-router = APIRouter(prefix="/v1", tags=["technicians"])
+router = APIRouter(prefix="/v1", tags=["technicians"], route_class=CommitRoute)
 
 
 @router.get("/sp/profile")
@@ -84,6 +84,7 @@ def update_profile(
         p.police_document_id = doc.id
     p.kyc_status = "pending_partner_verification"
     audit(db, user.id, "kyc_submit", "sp_profile", user.id)
+    db.flush()
     pins = [r.pincode for r in db.scalars(select(ServicePartnerPincode).where(ServicePartnerPincode.user_id == user.id))]
     cats = [r.category_id for r in db.scalars(select(ServicePartnerCategory).where(ServicePartnerCategory.user_id == user.id))]
     return {

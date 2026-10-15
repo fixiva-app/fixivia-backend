@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import CommitRoute, get_db
 from app.deps import current_user, require_roles
 from app.domain.otp import generate_code, hash_code
 from app.models import (
@@ -19,12 +19,13 @@ from app.models import (
     PartnerPincode,
     Pincode,
     User,
+    as_utc_aware,
     utcnow,
 )
 from app.services.notify import audit
 from app.services.serializers import user_public
 
-router = APIRouter(prefix="/v1", tags=["partners"])
+router = APIRouter(prefix="/v1", tags=["partners"], route_class=CommitRoute)
 
 
 class InviteOut(BaseModel):
@@ -70,7 +71,7 @@ class ApplyBody(BaseModel):
 def apply_partner(body: ApplyBody, db: Session = Depends(get_db)) -> dict:
     token_h = hash_code(body.invite_token, settings.otp_pepper)
     invite = db.scalar(select(PartnerInvite).where(PartnerInvite.token_hash == token_h))
-    if invite is None or invite.expires_at < utcnow():
+    if invite is None or as_utc_aware(invite.expires_at) < utcnow():
         raise HTTPException(400, "invite_invalid")
     if invite.used_by_partner_id:
         raise HTTPException(409, "invite_used")

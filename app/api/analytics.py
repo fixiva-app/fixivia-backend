@@ -8,11 +8,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import CommitRoute, get_db
 from app.deps import require_roles
 from app.models import Booking, BookingExclusion, BookingOffer, Partner, SaasInvoice, User
 
-router = APIRouter(prefix="/v1", tags=["analytics"])
+router = APIRouter(prefix="/v1", tags=["analytics"], route_class=CommitRoute)
 
 
 @router.get("/analytics")

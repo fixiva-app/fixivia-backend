@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import CommitRoute, get_db
 from app.dev_users import inject_payload
 
-router = APIRouter(prefix="/v1/dev", tags=["dev"])
+router = APIRouter(prefix="/v1/dev", tags=["dev"], route_class=CommitRoute)
 
 
 def _require_dev() -> None:
