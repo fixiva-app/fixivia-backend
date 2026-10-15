@@ -6,11 +6,12 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import TypeVar
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.domain.booking_rules import MAX_JOBS_PER_SLOT
 from app.domain.dispatch import TechnicianEligibility, is_eligible
 from app.models import (
     AvailabilityBlock,
@@ -74,41 +75,66 @@ def partner_admins(db: Session, partner_id: str) -> list[User]:
 
 
 def eligible_technicians(db: Session, booking: Booking) -> list[dict]:
-    """Pool-eligible SPs for a booking. Shared by dispatch and force-assign."""
+    """Pool-eligible SPs for a booking. Shared by dispatch and force-assign.
+
+    Set-based: one query per booking instead of ~5 per SP. A repool sweep
+    over hundreds of opens used to issue 250k+ statements (>60s); the same
+    results now cost two. Results and order (profile rowid) are unchanged.
+    """
     excluded = {
         row.service_partner_id
         for row in db.scalars(select(BookingExclusion).where(BookingExclusion.booking_id == booking.id))
     }
-    profiles = list(
-        db.scalars(
-            select(ServicePartnerProfile).where(
-                ServicePartnerProfile.partner_id == booking.partner_id,
-                ServicePartnerProfile.kyc_status == "approved",
-            )
+    jobs_in_slot = func.count(Booking.id)
+    stmt = (
+        select(User, jobs_in_slot)
+        .join(ServicePartnerProfile, ServicePartnerProfile.user_id == User.id)
+        .join(
+            ServicePartnerCategory,
+            (ServicePartnerCategory.user_id == User.id)
+            & (ServicePartnerCategory.category_id == booking.category_id),
         )
+        .join(
+            ServicePartnerPincode,
+            (ServicePartnerPincode.user_id == User.id)
+            & (ServicePartnerPincode.pincode == booking.pincode),
+        )
+        .outerjoin(
+            AvailabilityBlock,
+            (AvailabilityBlock.user_id == User.id)
+            & (AvailabilityBlock.block_date == booking.service_date)
+            & or_(AvailabilityBlock.slot.is_(None), AvailabilityBlock.slot == booking.slot),
+        )
+        .outerjoin(
+            Booking,
+            (Booking.assigned_sp_id == User.id)
+            & (Booking.service_date == booking.service_date)
+            & (Booking.slot == booking.slot)
+            & (Booking.status.in_(ACTIVE_SLOT_STATUSES)),
+        )
+        .where(
+            ServicePartnerProfile.partner_id == booking.partner_id,
+            ServicePartnerProfile.kyc_status == "approved",
+            User.status == "active",
+            AvailabilityBlock.id.is_(None),
+        )
+        .group_by(User.id)
+        .having(jobs_in_slot < MAX_JOBS_PER_SLOT)
+        # Profile scan order (rowid): matches the pre-rewrite per-SP loop so
+        # the offered list order is unchanged.
+        .order_by(text("service_partner_profiles.rowid"))
     )
+    if excluded:
+        stmt = stmt.where(User.id.notin_(excluded))
     out: list[dict] = []
-    for profile in profiles:
-        user = db.get(User, profile.user_id)
-        if user is None or user.status != "active":
-            continue
-        has_cat = db.get(ServicePartnerCategory, (user.id, booking.category_id))
-        has_pin = db.get(ServicePartnerPincode, (user.id, booking.pincode))
-        blocked = db.scalar(
-            select(AvailabilityBlock).where(
-                AvailabilityBlock.user_id == user.id,
-                AvailabilityBlock.block_date == booking.service_date,
-                or_(AvailabilityBlock.slot.is_(None), AvailabilityBlock.slot == booking.slot),
-            )
-        )
-        jobs = slot_job_count(db, user.id, booking.service_date, booking.slot)
+    for user, jobs in db.execute(stmt):
         ok = is_eligible(
             TechnicianEligibility(
                 approved=True,
                 same_partner=True,
-                offers_category=has_cat is not None,
-                works_pincode=has_pin is not None,
-                excluded=profile.user_id in excluded or blocked is not None,
+                offers_category=True,
+                works_pincode=True,
+                excluded=False,
                 jobs_in_slot=jobs,
             )
         )
@@ -128,25 +154,33 @@ def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) ->
         return {"empty": True, "reason": "partner"}
 
     techs = eligible_technicians(db, booking)
+    now = utcnow()
     savepoint = db.begin_nested()
     try:
-        offered: list[str] = []
+        offered: list[str] = [entry["user"].id for entry in techs]
+        if offered:
+            # One multi-row upsert instead of one statement per tech: same
+            # final rows (offered_at kept, last_notified_at refreshed).
+            db.execute(
+                sqlite_insert(BookingOffer)
+                .values(
+                    [
+                        {
+                            "booking_id": booking.id,
+                            "service_partner_id": uid,
+                            "last_notified_at": now,
+                        }
+                        for uid in offered
+                    ]
+                )
+                .on_conflict_do_update(
+                    index_elements=["booking_id", "service_partner_id"],
+                    set_={"last_notified_at": now},
+                )
+            )
         for entry in techs:
             user = entry["user"]
             jobs = entry["jobs_in_slot"]
-            db.execute(
-                sqlite_insert(BookingOffer)
-                .values(booking_id=booking.id, service_partner_id=user.id)
-                .on_conflict_do_nothing()
-            )
-            db.execute(
-                update(BookingOffer)
-                .where(
-                    BookingOffer.booking_id == booking.id,
-                    BookingOffer.service_partner_id == user.id,
-                )
-                .values(last_notified_at=utcnow())
-            )
             notify(
                 db,
                 user.id,
@@ -155,13 +189,12 @@ def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) ->
                 slot_load=jobs,
                 slot_cap=5,
             )
-            offered.append(user.id)
         db.flush()
         db.refresh(booking)
         if booking.status != "open":
             savepoint.rollback()
             return {"skipped": True, "reason": "settled_mid_pool"}
-        booking.last_dispatch_at = utcnow()
+        booking.last_dispatch_at = now
         booking.dispatch_refresh_count = (booking.dispatch_refresh_count or 0) + 1
         booking.pool_empty = len(offered) == 0
         ntype = "open_reminder" if admin_reminder else ("empty_pool" if not offered else "new_request")
