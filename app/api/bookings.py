@@ -160,6 +160,7 @@ def create_booking(
         db.add(BookingComplaint(booking_id=booking.id, issue_template_id=iid))
     for path in body.photo_paths:
         db.add(BookingPhoto(booking_id=booking.id, storage_path=path))
+    db.flush()  # complaints must be visible to the response serializer below
     background.add_task(_enqueue_pool, booking.id)
     return _booking_json(db, booking, user)
 

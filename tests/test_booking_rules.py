@@ -6,6 +6,7 @@ from app.domain.booking_rules import (
     MAX_JOBS_PER_SLOT,
     earliest_service_date,
     is_service_date_allowed,
+    now_kolkata,
     slot_has_capacity,
     slot_window,
 )
@@ -37,3 +38,16 @@ def test_slot_capacity_five():
         assert slot_has_capacity(n)
     assert not slot_has_capacity(MAX_JOBS_PER_SLOT)
     assert not slot_has_capacity(6)
+    with pytest.raises(ValueError, match="job_count"):
+        slot_has_capacity(-1)
+
+
+def test_now_kolkata_branches():
+    from zoneinfo import ZoneInfo
+
+    assert now_kolkata().tzinfo is not None
+    naive = datetime(2026, 9, 4, 10, 0)
+    assert now_kolkata(naive).tzinfo == ZoneInfo("Asia/Kolkata")
+    utc = datetime(2026, 9, 4, 10, 0, tzinfo=__import__("datetime").timezone.utc)
+    assert now_kolkata(utc).hour == 15  # +5:30
+    assert earliest_service_date(naive) == date(2026, 9, 6)

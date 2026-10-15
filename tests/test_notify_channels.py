@@ -76,3 +76,48 @@ def test_whatsapp_send_failure_is_channel_error():
         ch.send(user_id="u", mobile="9000000003", ntype="offer", booking_id="b", payload={})
     with pytest.raises(ChannelError):
         ch.send(user_id="u", mobile="", ntype="offer", booking_id="b", payload={})
+
+
+class _FakeResponse:
+    def __init__(self, status):
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_whatsapp_http_status_paths(monkeypatch):
+    import urllib.request
+
+    ch = WhatsAppNotificationChannel(api_base="https://bsp.example", api_key="k",
+                                     sender="Fixiva")
+    seen = {}
+
+    def _ok(req, timeout):
+        seen["url"] = req.full_url
+        seen["auth"] = req.headers.get("Authorization")
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _ok)
+    ch.send(user_id="u", mobile="9000000003", ntype="offer", booking_id="b",
+            payload={"slot_cap": 5})
+    assert seen["url"] == "https://bsp.example/messages"
+    assert seen["auth"] == "Bearer k"
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: _FakeResponse(500))
+    with pytest.raises(ChannelError, match="whatsapp http 500"):
+        ch.send(user_id="u", mobile="9000000003", ntype="offer", booking_id="b",
+                payload={})
+
+
+def test_get_channel_whatsapp_branch(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "whatsapp_enabled", True)
+    monkeypatch.setattr(settings, "whatsapp_api_base", "https://bsp.example")
+    monkeypatch.setattr(settings, "whatsapp_api_key", "k")
+    monkeypatch.setattr(settings, "whatsapp_sender", "Fixiva")
+    assert isinstance(get_notification_channel(), WhatsAppNotificationChannel)
