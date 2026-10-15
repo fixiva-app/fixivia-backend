@@ -6,10 +6,6 @@ on:
   push:
     branches: [main]
 
-defaults:
-  run:
-    working-directory: backend
-
 jobs:
   unit-tests:
     name: backend unit tests
@@ -20,7 +16,7 @@ jobs:
         with:
           python-version: "3.14"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: requirements.txt
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run unit tests with coverage gate
