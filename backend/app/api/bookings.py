@@ -14,7 +14,12 @@ from app.deps import current_user, require_roles
 from app.domain.booking_rules import is_service_date_allowed
 from app.domain.dispatch import ALREADY_TAKEN, ASSIGNED, accept_lock, force_assign_ready
 from app.domain.otp import generate_code, hash_code, reuse_start_work_otp
-from app.jobs.dispatch_job import dispatch_pool, eligible_technicians, slot_job_count
+from app.jobs.dispatch_job import (
+    dispatch_pool,
+    eligible_technicians,
+    slot_job_count,
+    with_busy_retry,
+)
 from app.models import (
     Booking,
     BookingComplaint,
@@ -41,12 +46,17 @@ router = APIRouter(prefix="/v1", tags=["bookings"], route_class=CommitRoute)
 
 
 def _enqueue_pool(booking_id: str) -> None:
-    db = SessionLocal()
-    try:
-        dispatch_pool(db, booking_id)
-        db.commit()
-    finally:
-        db.close()
+    def _once():
+        db = SessionLocal()
+        try:
+            out = dispatch_pool(db, booking_id)
+            db.commit()
+            return out
+        finally:
+            db.close()
+
+    # Fresh session per attempt: a stale read txn would re-trigger the lock.
+    with_busy_retry(f"pool:{booking_id}", _once)
 
 
 class AddressBody(BaseModel):
