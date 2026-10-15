@@ -29,6 +29,7 @@ from app.models import (
     PayoutLedger,
     ServiceCategory,
     User,
+    as_utc_aware,
     utcnow,
 )
 from app.services.notify import audit, notify
@@ -523,8 +524,10 @@ def _booking_json(db: Session, b: Booking, viewer: User) -> dict:
         "pool_empty": b.pool_empty,
         "dispatch_refresh_count": b.dispatch_refresh_count or 0,
         "force_assign_ready": force_assign_ready(b.status, b.created_at, b.dispatch_refresh_count or 0),
-        "created_at": b.created_at.isoformat() if b.created_at else None,
-        "first_accepted_at": b.first_accepted_at.isoformat() if b.first_accepted_at else None,
+        "created_at": as_utc_aware(b.created_at).isoformat() if b.created_at else None,
+        "first_accepted_at": (
+            as_utc_aware(b.first_accepted_at).isoformat() if b.first_accepted_at else None
+        ),
         "payment_mode": b.payment_mode,
         "rating": b.rating,
     }
