@@ -29,6 +29,8 @@ def test_eligible_happy_path():
     assert is_eligible(_tech(jobs_in_slot=4))
     assert not is_eligible(_tech(jobs_in_slot=5))
     assert not is_eligible(_tech(approved=False))
+    assert not is_eligible(_tech(same_partner=False))
+    assert not is_eligible(_tech(offers_category=False))
     assert not is_eligible(_tech(excluded=True))
     assert not is_eligible(_tech(works_pincode=False))
 
@@ -57,6 +59,11 @@ def test_force_assign_gate():
     # or two pools ran with no accept
     assert force_assign_ready("open", fresh, 2, now)
     assert force_assign_ready("open", None, 2, now)
+    # unknown creation time and too few pools: not ready
+    assert not force_assign_ready("open", None, 1, now)
+    assert not force_assign_ready("open", None, 0, now)
+    # naive datetimes are treated as UTC
+    assert force_assign_ready("open", stale.replace(tzinfo=None), 1, now)
     # never for non-open bookings
     assert not force_assign_ready("assigned", stale, 5, now)
     assert not force_assign_ready("completed", stale, 5, now)
