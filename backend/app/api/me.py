@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db import CommitRoute, get_db
 from app.deps import current_user
-from app.jobs.dispatch_job import dispatch_repool_open
+from app.jobs.dispatch_job import dispatch_repool_open, with_busy_retry
 from app.models import Notification, User
 from app.services.serializers import user_public
 
@@ -41,5 +41,6 @@ def cron_repool(user: User = Depends(current_user), db: Session = Depends(get_db
         from fastapi import HTTPException
 
         raise HTTPException(403, "forbidden")
-    n = dispatch_repool_open(db)
+    n = with_busy_retry("repool", lambda: dispatch_repool_open(db),
+                          on_retry=db.rollback)
     return {"open_bookings": n}

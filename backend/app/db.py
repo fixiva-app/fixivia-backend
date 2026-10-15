@@ -15,11 +15,23 @@ from app.models import Base
 connect_args = {}
 engine_kwargs: dict = {}
 if settings.database_url.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
+    connect_args = {"check_same_thread": False, "timeout": 30}
     if ":memory:" in settings.database_url:
         engine_kwargs["poolclass"] = StaticPool
 
 engine = create_engine(settings.database_url, connect_args=connect_args, **engine_kwargs)
+
+if settings.database_url.startswith("sqlite"):
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record) -> None:
+        # Background pool writes race request writes; WAL + a long busy
+        # timeout turn "database is locked" 500s into brief waits.
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.close()
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

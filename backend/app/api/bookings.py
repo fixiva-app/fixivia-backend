@@ -14,7 +14,12 @@ from app.deps import current_user, require_roles
 from app.domain.booking_rules import is_service_date_allowed
 from app.domain.dispatch import ALREADY_TAKEN, ASSIGNED, accept_lock, force_assign_ready
 from app.domain.otp import generate_code, hash_code, reuse_start_work_otp
-from app.jobs.dispatch_job import dispatch_pool, eligible_technicians, slot_job_count
+from app.jobs.dispatch_job import (
+    dispatch_pool,
+    eligible_technicians,
+    slot_job_count,
+    with_busy_retry,
+)
 from app.models import (
     Booking,
     BookingComplaint,
@@ -29,6 +34,7 @@ from app.models import (
     PayoutLedger,
     ServiceCategory,
     User,
+    as_utc_aware,
     utcnow,
 )
 from app.services.notify import audit, notify
@@ -40,12 +46,17 @@ router = APIRouter(prefix="/v1", tags=["bookings"], route_class=CommitRoute)
 
 
 def _enqueue_pool(booking_id: str) -> None:
-    db = SessionLocal()
-    try:
-        dispatch_pool(db, booking_id)
-        db.commit()
-    finally:
-        db.close()
+    def _once():
+        db = SessionLocal()
+        try:
+            out = dispatch_pool(db, booking_id)
+            db.commit()
+            return out
+        finally:
+            db.close()
+
+    # Fresh session per attempt: a stale read txn would re-trigger the lock.
+    with_busy_retry(f"pool:{booking_id}", _once)
 
 
 class AddressBody(BaseModel):
@@ -523,8 +534,10 @@ def _booking_json(db: Session, b: Booking, viewer: User) -> dict:
         "pool_empty": b.pool_empty,
         "dispatch_refresh_count": b.dispatch_refresh_count or 0,
         "force_assign_ready": force_assign_ready(b.status, b.created_at, b.dispatch_refresh_count or 0),
-        "created_at": b.created_at.isoformat() if b.created_at else None,
-        "first_accepted_at": b.first_accepted_at.isoformat() if b.first_accepted_at else None,
+        "created_at": as_utc_aware(b.created_at).isoformat() if b.created_at else None,
+        "first_accepted_at": (
+            as_utc_aware(b.first_accepted_at).isoformat() if b.first_accepted_at else None
+        ),
         "payment_mode": b.payment_mode,
         "rating": b.rating,
     }

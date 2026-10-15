@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import sqlite3
+import time
+from collections.abc import Callable
 from decimal import Decimal
+from typing import TypeVar
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.domain.dispatch import TechnicianEligibility, is_eligible
@@ -23,6 +28,26 @@ from app.models import (
 from app.services.notify import notify
 
 ACTIVE_SLOT_STATUSES = ("assigned", "en_route", "in_progress", "completed")
+
+T = TypeVar("T")
+
+
+def with_busy_retry(label: str, fn: Callable[[], T], *, attempts: int = 5,
+                    on_retry: Callable[[], None] | None = None) -> T:
+    """Retry fn when SQLite reports a lock. WAL busy-timeouts don't cover
+    snapshot-busy (read-then-write across racing sessions), which fails fast;
+    a fresh attempt milliseconds later succeeds."""
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except (OperationalError, sqlite3.OperationalError) as exc:
+            if "locked" not in str(exc).lower() or attempt == attempts - 1:
+                raise
+            if on_retry is not None:
+                on_retry()
+            print(f"[POOL] {label} busy, retry {attempt + 1}", flush=True)
+            time.sleep(0.05 * (2 ** attempt))
+    raise AssertionError("unreachable")
 
 
 def slot_job_count(db: Session, sp_id: str, service_date, slot: str) -> int:
