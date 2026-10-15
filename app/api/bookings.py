@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -486,6 +486,9 @@ def cancel_booking(booking_id: str, user: User = Depends(current_user), db: Sess
         raise HTTPException(403, "forbidden")
     b.status = "cancelled"
     b.cancelled_at = utcnow()
+    # Drop the pool's offer rows: a cancelled job must vanish from SP queues
+    # deterministically, whether or not its background pool committed first.
+    db.execute(delete(BookingOffer).where(BookingOffer.booking_id == b.id))
     return _booking_json(db, b, user)
 
 
