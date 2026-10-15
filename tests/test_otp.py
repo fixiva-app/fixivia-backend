@@ -39,3 +39,17 @@ def test_start_work_otp_reused_on_reassign():
     assert reuse_start_work_otp("abc") is True
     assert reuse_start_work_otp(None) is False
     assert reuse_start_work_otp("") is False
+
+
+def test_verify_rejects_consumed_and_defaults_now():
+    from dataclasses import replace
+
+    now = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
+    ch, code = make_challenge(OtpPurpose.LOGIN, "+91", "p", 10, now=now, code="123456")
+    used = replace(ch, consumed_at=now)
+    with pytest.raises(ValueError, match="otp_already_used"):
+        verify_challenge(used, code, "p", now=now)
+    # default `now` (wall clock) works for a fresh challenge
+    fresh, code2 = make_challenge(OtpPurpose.LOGIN, "+91", "p", 10, code="654321")
+    verify_challenge(fresh, code2, "p")
+    assert fresh.expires_at.tzinfo is not None
