@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.domain.dispatch import TechnicianEligibility, is_eligible
@@ -101,31 +102,51 @@ def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) ->
         booking.pool_empty = True
         return {"empty": True, "reason": "partner"}
 
-    offered: list[str] = []
-    for entry in eligible_technicians(db, booking):
-        user = entry["user"]
-        jobs = entry["jobs_in_slot"]
-        existing = db.get(BookingOffer, (booking.id, user.id))
-        if existing:
-            existing.last_notified_at = utcnow()
-        else:
-            db.add(BookingOffer(booking_id=booking.id, service_partner_id=user.id))
-        notify(
-            db,
-            user.id,
-            "offer",
-            booking.id,
-            slot_load=jobs,
-            slot_cap=5,
-        )
-        offered.append(user.id)
-
-    booking.last_dispatch_at = utcnow()
-    booking.dispatch_refresh_count = (booking.dispatch_refresh_count or 0) + 1
-    booking.pool_empty = len(offered) == 0
-    ntype = "open_reminder" if admin_reminder else ("empty_pool" if not offered else "new_request")
-    for admin in partner_admins(db, booking.partner_id):
-        notify(db, admin.id, ntype, booking.id, offered=len(offered))
+    techs = eligible_technicians(db, booking)
+    savepoint = db.begin_nested()
+    try:
+        offered: list[str] = []
+        for entry in techs:
+            user = entry["user"]
+            jobs = entry["jobs_in_slot"]
+            db.execute(
+                sqlite_insert(BookingOffer)
+                .values(booking_id=booking.id, service_partner_id=user.id)
+                .on_conflict_do_nothing()
+            )
+            db.execute(
+                update(BookingOffer)
+                .where(
+                    BookingOffer.booking_id == booking.id,
+                    BookingOffer.service_partner_id == user.id,
+                )
+                .values(last_notified_at=utcnow())
+            )
+            notify(
+                db,
+                user.id,
+                "offer",
+                booking.id,
+                slot_load=jobs,
+                slot_cap=5,
+            )
+            offered.append(user.id)
+        db.flush()
+        db.refresh(booking)
+        if booking.status != "open":
+            savepoint.rollback()
+            return {"skipped": True, "reason": "settled_mid_pool"}
+        booking.last_dispatch_at = utcnow()
+        booking.dispatch_refresh_count = (booking.dispatch_refresh_count or 0) + 1
+        booking.pool_empty = len(offered) == 0
+        ntype = "open_reminder" if admin_reminder else ("empty_pool" if not offered else "new_request")
+        for admin in partner_admins(db, booking.partner_id):
+            notify(db, admin.id, ntype, booking.id, offered=len(offered))
+        db.flush()
+        savepoint.commit()
+    except Exception:
+        savepoint.rollback()
+        raise
     return {"offered": offered, "empty": len(offered) == 0}
 
 
