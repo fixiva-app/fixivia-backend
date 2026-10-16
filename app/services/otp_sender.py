@@ -4,6 +4,15 @@ from app.config import settings
 from app.domain.otp import OtpPurpose
 from app.services.notify import WhatsAppNotificationChannel
 
+# Last plaintext code per (purpose, mobile), dev sender only. Backs the
+# dev-only GET /v1/dev/otp-code hook the browser UI tests poll: the DB
+# keeps hashes, and Dart in Chrome cannot read the server console.
+_LAST_CODES: dict[tuple[str, str], str] = {}
+
+
+def last_console_code(purpose: str, mobile: str) -> str | None:
+    return _LAST_CODES.get((purpose, mobile))
+
 
 class OtpSender:
     def send(self, purpose: OtpPurpose, destination: str, code: str, meta: str | None = None) -> None:
@@ -15,6 +24,7 @@ class ConsoleOtpSender(OtpSender):
 
     def send(self, purpose: OtpPurpose, destination: str, code: str, meta: str | None = None) -> None:
         extra = f" {meta}" if meta else ""
+        _LAST_CODES[(purpose.value, destination)] = code
         print(f"[OTP] purpose={purpose.value} mobile={destination} code={code}{extra}", flush=True)
 
 
