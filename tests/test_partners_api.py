@@ -236,3 +236,13 @@ def test_pincodes_sorted(capsys):
         assert codes == sorted(codes)
         assert {"682001", "682011", "695001"} <= set(codes)
         assert set(pins[0]) == {"pincode", "district", "locality", "state"}
+
+
+def test_pincodes_served_only(capsys):
+    with make_client() as client:
+        pins = client.get("/v1/pincodes", params={"served_only": True}).json()
+        codes = [p["pincode"] for p in pins]
+        assert codes == sorted(codes)
+        assert {"682001", "682011"} <= set(codes)
+        assert "695001" not in codes  # no approved partner covers it
+        assert set(pins[0]) == {"pincode", "district", "locality", "state"}

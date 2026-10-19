@@ -262,8 +262,16 @@ def review_admin_request(
 
 
 @router.get("/pincodes")
-def list_pincodes(db: Session = Depends(get_db)) -> list[dict]:
-    rows = db.scalars(select(Pincode).order_by(Pincode.pincode))
+def list_pincodes(db: Session = Depends(get_db), served_only: bool = False) -> list[dict]:
+    q = select(Pincode).order_by(Pincode.pincode)
+    if served_only:
+        covered = (
+            select(PartnerPincode.pincode)
+            .join(Partner, Partner.id == PartnerPincode.partner_id)
+            .where(Partner.status == "approved")
+        )
+        q = q.where(Pincode.pincode.in_(covered))
+    rows = db.scalars(q)
     return [{"pincode": p.pincode, "district": p.district, "locality": p.locality, "state": p.state} for p in rows]
 
 
