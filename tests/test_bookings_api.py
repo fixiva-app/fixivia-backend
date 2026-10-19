@@ -402,6 +402,14 @@ def test_start_and_en_route_matrix(capsys):
         h_c, h_s = _headers(cust["token"]), _headers(sp["token"])
         h_f, fresh = _fresh_sp(client, capsys, owner["user"]["partner_id"])
         bid, _ = _book(client, h_c, next(_days))
+        db = SessionLocal()
+        try:
+            # Start requires the service date to have arrived; the matrix
+            # below exercises status/OTP gates, not the date gate.
+            db.get(Booking, bid).service_date = date.today()
+            db.commit()
+        finally:
+            db.close()
         assert client.post("/v1/bookings/nope/start", headers=h_f,
                            json={"code": "1"}).status_code == 404
         assert client.post("/v1/bookings/nope/en-route", headers=h_f).status_code == 404
@@ -439,6 +447,26 @@ def test_start_and_en_route_matrix(capsys):
         r = client.post(f"/v1/bookings/{bid2}/start", headers=h_f,
                         json={"code": "123456"})
         assert r.json() == {"detail": "otp_invalid"}
+
+
+def test_start_too_early_until_due(capsys):
+    with make_client() as client:
+        cust = _login(client, capsys, "9000000004")
+        owner = _login(client, capsys, "9000000002")
+        h_c = _headers(cust["token"])
+        h_f, _ = _fresh_sp(client, capsys, owner["user"]["partner_id"])
+        bid, _ = _book(client, h_c, next(_days))
+        code = _start_code(client, capsys, h_f, bid)
+        r = client.post(f"/v1/bookings/{bid}/start", headers=h_f,
+                        json={"code": code})
+        assert r.json() == {"detail": "too_early"}
+        r = client.post("/v1/dev/bookings/make-due",
+                        json={"booking_ids": [bid]})
+        assert r.status_code == 200, r.text
+        assert r.json() == {"moved": [bid]}
+        r = client.post(f"/v1/bookings/{bid}/start", headers=h_f,
+                        json={"code": code})
+        assert r.json()["status"] == "in_progress"
 
 
 def test_complete_matrix(capsys):
