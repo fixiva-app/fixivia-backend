@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import CommitRoute, SessionLocal, get_db
 from app.deps import current_user, require_roles
-from app.domain.booking_rules import is_service_date_allowed
+from app.domain.booking_rules import is_service_date_allowed, now_kolkata
 from app.domain.dispatch import ALREADY_TAKEN, ASSIGNED, accept_lock, force_assign_ready
 from app.domain.otp import generate_code, hash_code, reuse_start_work_otp
 from app.jobs.dispatch_job import (
@@ -419,6 +419,8 @@ def start_work(
         raise HTTPException(400, "bad_status")
     if not b.start_work_otp_hash or hash_code(body.code, settings.otp_pepper) != b.start_work_otp_hash:
         raise HTTPException(400, "otp_invalid")
+    if b.service_date > now_kolkata().date():
+        raise HTTPException(400, "too_early")
     b.status = "in_progress"
     b.start_work_verified_at = utcnow()
     return _booking_json(db, b, user)

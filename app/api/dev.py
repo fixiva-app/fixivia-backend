@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import CommitRoute, get_db
 from app.dev_users import inject_payload
+from app.domain.booking_rules import now_kolkata
 from app.domain.otp import OtpPurpose
 from app.models import (
     AvailabilityBlock,
@@ -51,6 +52,39 @@ def read_otp_code(mobile: str, purpose: OtpPurpose = OtpPurpose.LOGIN) -> dict:
     if code is None:
         raise HTTPException(status_code=404, detail="otp_not_found")
     return {"mobile": mobile, "purpose": purpose.value, "code": code}
+
+
+class MakeDueBody(BaseModel):
+    booking_ids: list[str] = Field(default_factory=list)
+    customer_mobile: str | None = None
+
+
+@router.post("/bookings/make-due")
+def make_bookings_due(body: MakeDueBody, db: Session = Depends(get_db)) -> dict:
+    """Move test bookings' service_date to today (Asia/Kolkata).
+
+    Dev flavor only (UI/API tests). Production bookings are always
+    created 48h out, so journeys that start work same-day move their
+    own bookings due first. Only non-final bookings move; completed
+    and cancelled rows are left untouched. Prefer booking_ids; the
+    customer_mobile form moves that customer's non-final bookings and
+    is meant for isolated single-journey runs.
+    """
+    _require_dev()
+    today = now_kolkata().date()
+    q = select(Booking).where(Booking.status.not_in(("completed", "cancelled")))
+    if body.booking_ids:
+        q = q.where(Booking.id.in_(body.booking_ids))
+    if body.customer_mobile:
+        sub = select(User.id).where(User.mobile == body.customer_mobile)
+        q = q.where(Booking.customer_id.in_(sub))
+    if not body.booking_ids and not body.customer_mobile:
+        return {"moved": []}
+    moved = []
+    for b in db.scalars(q):
+        b.service_date = today
+        moved.append(b.id)
+    return {"moved": moved}
 
 
 class WipeBody(BaseModel):
