@@ -40,6 +40,8 @@ class OtpVerify(BaseModel):
 def request_otp(body: OtpRequest, db: Session = Depends(get_db)) -> dict:
     if body.purpose == OtpPurpose.START_WORK:
         raise HTTPException(400, "start_work otp is created on accept, not requested by the client")
+    if body.purpose == OtpPurpose.MOBILE_CHANGE:
+        raise HTTPException(400, "mobile_change otp is issued by the mobile-change endpoint, not requested here")
     challenge, code = make_challenge(
         body.purpose,
         body.mobile,
@@ -62,6 +64,8 @@ def request_otp(body: OtpRequest, db: Session = Depends(get_db)) -> dict:
 def verify_otp(body: OtpVerify, db: Session = Depends(get_db)) -> dict:
     if body.purpose == OtpPurpose.START_WORK:
         raise HTTPException(400, "use the start-work endpoint after accept")
+    if body.purpose == OtpPurpose.MOBILE_CHANGE:
+        raise HTTPException(400, "use the mobile-change endpoint to confirm a new number")
     row = db.scalar(
         select(OtpChallengeRow)
         .where(
