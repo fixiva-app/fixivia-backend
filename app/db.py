@@ -37,6 +37,16 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    # TEMP-OTP: otp_codes predates the booking_id column on existing DBs;
+    # create_all never adds columns. Best-effort ALTER, ignored when the
+    # column already exists (fresh DBs) or the write races another boot.
+    from sqlalchemy import text
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE otp_codes ADD COLUMN booking_id VARCHAR(36)"))
+    except Exception:
+        pass
 
 
 def get_db(request: Request) -> Generator[Session, None, None]:

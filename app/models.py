@@ -120,6 +120,7 @@ class OtpCodeRow(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    booking_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
 
 class PartnerAdminRequest(Base):
