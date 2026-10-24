@@ -17,7 +17,7 @@ from app.domain.otp import (
     verify_challenge,
 )
 from app.jobs.dispatch_job import dispatch_repool_open, with_busy_retry
-from app.models import Notification, OtpChallengeRow, User, utcnow
+from app.models import Notification, OtpChallengeRow, OtpCodeRow, User, utcnow
 from app.services.otp_sender import default_otp_sender
 from app.services.serializers import user_public
 
@@ -91,6 +91,15 @@ def request_mobile_change(
             expires_at=challenge.expires_at,
         )
     )
+    # TEMP-OTP: plaintext mirror for the admin read API.
+    db.add(
+        OtpCodeRow(
+            purpose=OtpPurpose.MOBILE_CHANGE.value,
+            mobile=mobile,
+            code=code,
+            expires_at=challenge.expires_at,
+        )
+    )
     default_otp_sender().send(OtpPurpose.MOBILE_CHANGE, mobile, code)
     return {"sent": True}
 
@@ -133,6 +142,18 @@ def confirm_mobile_change(
     if other is not None and other != user.id:
         raise HTTPException(409, "mobile_taken")
     row.consumed_at = utcnow()
+    # TEMP-OTP: retire the plaintext mirror on successful verify.
+    mirror = db.scalar(
+        select(OtpCodeRow)
+        .where(
+            OtpCodeRow.mobile == mobile,
+            OtpCodeRow.purpose == OtpPurpose.MOBILE_CHANGE.value,
+            OtpCodeRow.consumed_at.is_(None),
+        )
+        .order_by(OtpCodeRow.expires_at.desc())
+    )
+    if mirror is not None:
+        mirror.consumed_at = utcnow()
     user.mobile = mobile
     return user_public(user)
 

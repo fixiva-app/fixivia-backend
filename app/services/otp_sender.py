@@ -23,9 +23,9 @@ class ConsoleOtpSender(OtpSender):
     """Dev mock: print to server stdout. Swap for WhatsApp later; call sites stay the same."""
 
     def send(self, purpose: OtpPurpose, destination: str, code: str, meta: str | None = None) -> None:
-        extra = f" {meta}" if meta else ""
+        # No console print: codes are read via the TEMP-OTP admin API.
+        # _LAST_CODES is still kept: it backs /v1/dev/otp-code for UI tests.
         _LAST_CODES[(purpose.value, destination)] = code
-        print(f"[OTP] purpose={purpose.value} mobile={destination} code={code}{extra}", flush=True)
 
 
 class WhatsAppOtpSender(OtpSender):

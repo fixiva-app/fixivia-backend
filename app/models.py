@@ -109,6 +109,19 @@ class OtpChallengeRow(Base):
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+# TEMP-OTP: plaintext mirror of active challenges for the temporary admin
+# read API. DELETE with api/otp_admin.py once real SMS/WhatsApp ships.
+class OtpCodeRow(Base):
+    __tablename__ = "otp_codes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    purpose: Mapped[str] = mapped_column(String(20))
+    mobile: Mapped[str] = mapped_column(String(16), index=True)
+    code: Mapped[str] = mapped_column(String(6))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class PartnerAdminRequest(Base):
     __tablename__ = "partner_admin_requests"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

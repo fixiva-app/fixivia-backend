@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     whatsapp_api_base: str = ""
     whatsapp_api_key: str = ""
     whatsapp_sender: str = ""
+    # TEMP-OTP: creds for the temporary admin OTP read API. Set real
+    # values in the host console; DELETE once real SMS/WhatsApp ships.
+    otp_admin_user: str = "otpadmin"
+    otp_admin_pass: str = "otpadminpass"
 
 
 settings = Settings()
