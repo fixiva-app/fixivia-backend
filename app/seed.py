@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ from app.models import (
     PartnerCategoryPricing,
     PartnerPincode,
     Pincode,
+    Product,
     SaasInvoice,
     ServiceCategory,
     CategoryIssueTemplate,
@@ -84,6 +87,8 @@ def seed_if_empty(db: Session) -> None:
         _seed_geo_and_catalog(db)
         _seed_partner_org(db)
         _seed_invoice(db)
+    if db.scalar(select(Product).limit(1)) is None:
+        _seed_products(db)
     ensure_dev_users(db)
 
 
@@ -234,4 +239,14 @@ def _seed_invoice(db: Session) -> None:
             status="sent",
         )
     )
+    db.flush()
+
+
+def _seed_products(db: Session) -> None:
+    path = Path(__file__).resolve().parent / "data" / "products_seed.json"
+    rows = json.loads(path.read_text())
+    for r in rows:
+        if db.scalar(select(Product).where(Product.sku == r["sku"])):
+            continue
+        db.add(Product(**r))
     db.flush()
