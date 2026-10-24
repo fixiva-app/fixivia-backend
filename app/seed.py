@@ -87,8 +87,9 @@ def seed_if_empty(db: Session) -> None:
         _seed_geo_and_catalog(db)
         _seed_partner_org(db)
         _seed_invoice(db)
-    if db.scalar(select(Product).limit(1)) is None:
-        _seed_products(db)
+    # Unconditional: _seed_products is idempotent and backfills images
+    # for rows seeded before product_images existed.
+    _seed_products(db)
     ensure_dev_users(db)
 
 
@@ -242,11 +243,40 @@ def _seed_invoice(db: Session) -> None:
     db.flush()
 
 
+_IMAGE_MIME = {
+    ".webp": "image/webp",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
+
+
+def _seed_image_bytes(name: str | None) -> tuple[bytes | None, str]:
+    if not name:
+        return None, ""
+    img = Path(__file__).resolve().parent / "data" / "product_images" / name
+    if not img.is_file():
+        return None, ""
+    return img.read_bytes(), _IMAGE_MIME.get(img.suffix.lower(), "application/octet-stream")
+
+
 def _seed_products(db: Session) -> None:
     path = Path(__file__).resolve().parent / "data" / "products_seed.json"
     rows = json.loads(path.read_text())
     for r in rows:
-        if db.scalar(select(Product).where(Product.sku == r["sku"])):
+        existing = db.scalar(select(Product).where(Product.sku == r["sku"]))
+        if existing is not None:
+            # Backfill: rows seeded before images existed get theirs now.
+            if existing.image_bytes is None:
+                data, mime = _seed_image_bytes(r.get("image_file"))
+                if data is not None:
+                    existing.image_bytes = data
+                    existing.image_mime = mime
             continue
-        db.add(Product(**r))
+        fields = {k: v for k, v in r.items() if k != "image_file"}
+        product = Product(**fields)
+        data, mime = _seed_image_bytes(r.get("image_file"))
+        product.image_bytes = data
+        product.image_mime = mime
+        db.add(product)
     db.flush()
