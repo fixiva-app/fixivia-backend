@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     otp_pepper: str = "dev-only-otp-pepper"
     database_url: str = "sqlite+pysqlite:///./fixvia.db"
     seed_on_start: bool = True
+    cors_origins: str = "*"
     whatsapp_enabled: bool = False
     whatsapp_api_base: str = ""
     whatsapp_api_key: str = ""
@@ -20,6 +21,12 @@ class Settings(BaseSettings):
     # values in the host console; DELETE once real SMS/WhatsApp ships.
     otp_admin_user: str = "otpadmin"
     otp_admin_pass: str = "otpadminpass"
+    # R2 object storage for product images. All empty = disabled, and
+    # images stay as DB blobs (local dev + test default).
+    r2_endpoint: str = ""
+    r2_bucket: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
 
 
 settings = Settings()

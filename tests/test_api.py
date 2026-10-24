@@ -16,13 +16,14 @@ def _otp(client, mobile, purpose, **extra):
 
 
 def test_register_login_otp_roundtrip(capsys):
+    from tests.conftest import admin_otp_code
+
     with make_client() as client:
         mobile = "9111111111"
         req = client.post("/v1/otp/request", json={"mobile": mobile, "purpose": "register"})
         assert req.status_code == 200
-        printed = capsys.readouterr().out
-        assert "[OTP] purpose=register" in printed
-        code = [p for p in printed.split() if p.startswith("code=")][-1].split("=", 1)[1]
+        assert "[OTP]" not in capsys.readouterr().out
+        code = admin_otp_code(client, mobile, "register")
         ok = client.post(
             "/v1/otp/verify",
             json={

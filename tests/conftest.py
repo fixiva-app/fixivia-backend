@@ -12,6 +12,21 @@ def make_client() -> TestClient:
     return TestClient(app)
 
 
+def admin_otp_code(client: TestClient, mobile: str, purpose: str = "login") -> str:
+    """TEMP-OTP: read a live code via the admin API (replaces stdout parsing)."""
+    from app.config import settings
+
+    r = client.get(
+        f"/v1/admin/otp-code?mobile={mobile}&purpose={purpose}",
+        headers={
+            "X-Otp-Admin-User": settings.otp_admin_user,
+            "X-Otp-Admin-Pass": settings.otp_admin_pass,
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["code"]
+
+
 _STARTED = {"t": 0.0}
 
 

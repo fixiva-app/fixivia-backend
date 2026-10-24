@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import TypeVar
 
 from sqlalchemy import func, or_, select, text
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects import postgresql as pg_insert_module
+from sqlalchemy.dialects import sqlite as sqlite_insert_module
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,10 @@ from app.services.notify import notify
 ACTIVE_SLOT_STATUSES = ("assigned", "en_route", "in_progress", "completed")
 
 T = TypeVar("T")
+
+
+def _is_pg(db: Session) -> bool:
+    return db.get_bind().dialect.name == "postgresql"
 
 
 def with_busy_retry(label: str, fn: Callable[[], T], *, attempts: int = 5,
@@ -120,9 +125,14 @@ def eligible_technicians(db: Session, booking: Booking) -> list[dict]:
         )
         .group_by(User.id)
         .having(jobs_in_slot < MAX_JOBS_PER_SLOT)
-        # Profile scan order (rowid): matches the pre-rewrite per-SP loop so
-        # the offered list order is unchanged.
-        .order_by(text("service_partner_profiles.rowid"))
+        # Profile scan order (sqlite rowid): matches the pre-rewrite per-SP
+        # loop so the offered list order is unchanged. Postgres has no
+        # rowid; PK order is deterministic (no test asserts offer order).
+        .order_by(
+            ServicePartnerProfile.user_id
+            if _is_pg(db)
+            else text("service_partner_profiles.rowid")
+        )
     )
     if excluded:
         stmt = stmt.where(User.id.notin_(excluded))
@@ -161,8 +171,9 @@ def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) ->
         if offered:
             # One multi-row upsert instead of one statement per tech: same
             # final rows (offered_at kept, last_notified_at refreshed).
+            _insert = pg_insert_module.insert if _is_pg(db) else sqlite_insert_module.insert
             db.execute(
-                sqlite_insert(BookingOffer)
+                _insert(BookingOffer)
                 .values(
                     [
                         {

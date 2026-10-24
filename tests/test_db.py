@@ -6,7 +6,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 
 import app.db as db_mod
-from app.db import CommitRoute, SessionLocal, get_db
+from app.db import CommitRoute, SessionLocal, get_db, init_db
+
+
+def test_init_db_idempotent_and_backfills_columns():
+    init_db()
+    init_db()  # second run hits existing-column ALTERs; must not raise
+    with db_mod.engine.connect() as conn:
+        prod_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(products)")]
+        otp_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(otp_codes)")]
+    assert "image_key" in prod_cols
+    assert "booking_id" in otp_cols
 
 
 def test_memory_engine_uses_static_pool_and_busy_timeout():

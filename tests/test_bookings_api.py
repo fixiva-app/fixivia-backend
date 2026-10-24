@@ -386,12 +386,18 @@ def test_decline_drop_gates(capsys):
 
 
 def _start_code(client, capsys, h_s, bid):
-    capsys.readouterr()
     assert client.post(f"/v1/bookings/{bid}/accept", headers=h_s).status_code == 200
-    printed = capsys.readouterr().out
-    line = [ln for ln in printed.splitlines()
-            if "purpose=start_work" in ln and bid in ln][0]
-    return line.split("code=")[1].split()[0]
+    from app.config import settings
+
+    r = client.get(
+        f"/v1/admin/otp-code?booking_id={bid}",
+        headers={
+            "X-Otp-Admin-User": settings.otp_admin_user,
+            "X-Otp-Admin-Pass": settings.otp_admin_pass,
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["code"]
 
 
 def test_start_and_en_route_matrix(capsys):

@@ -18,6 +18,10 @@ if settings.database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False, "timeout": 30}
     if ":memory:" in settings.database_url:
         engine_kwargs["poolclass"] = StaticPool
+else:
+    # Remote DB (Supabase Postgres, possibly via pgbouncer): recycle dead
+    # pooled connections instead of failing the first query on them.
+    engine_kwargs["pool_pre_ping"] = True
 
 engine = create_engine(settings.database_url, connect_args=connect_args, **engine_kwargs)
 
@@ -37,16 +41,20 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
-    # TEMP-OTP: otp_codes predates the booking_id column on existing DBs;
-    # create_all never adds columns. Best-effort ALTER, ignored when the
-    # column already exists (fresh DBs) or the write races another boot.
+    # create_all never adds columns to existing tables. Best-effort ALTERs
+    # for columns added after first release; ignored when the column
+    # already exists (fresh DBs) or the write races another boot.
     from sqlalchemy import text
 
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE otp_codes ADD COLUMN booking_id VARCHAR(36)"))
-    except Exception:
-        pass
+    for table, column, ddl in (
+        ("otp_codes", "booking_id", "VARCHAR(36)"),  # TEMP-OTP
+        ("products", "image_key", "VARCHAR(200)"),  # R2 object key
+    ):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+        except Exception:
+            pass
 
 
 def get_db(request: Request) -> Generator[Session, None, None]:

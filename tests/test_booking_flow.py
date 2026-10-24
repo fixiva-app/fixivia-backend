@@ -5,8 +5,9 @@ from tests.conftest import make_client
 
 def _login(client, capsys, mobile, purpose="login", **reg):
     client.post("/v1/otp/request", json={"mobile": mobile, "purpose": purpose})
-    printed = capsys.readouterr().out
-    code = [p for p in printed.split() if p.startswith("code=")][-1].split("=", 1)[1]
+    from tests.conftest import admin_otp_code
+
+    code = admin_otp_code(client, mobile, purpose)
     body = {"mobile": mobile, "purpose": purpose, "code": code, **reg}
     r = client.post("/v1/otp/verify", json=body)
     assert r.status_code == 200, r.text

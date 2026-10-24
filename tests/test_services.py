@@ -81,12 +81,15 @@ def test_otp_sender_base_is_abstract():
 
 
 def test_console_sender_format(capsys):
+    from app.services.otp_sender import last_console_code
+
     ConsoleOtpSender().send(OtpPurpose.LOGIN, "9000000001", "123456")
-    out = capsys.readouterr().out
-    assert "purpose=login mobile=9000000001 code=123456" in out
+    assert capsys.readouterr().out == ""
+    assert last_console_code("login", "9000000001") == "123456"
     ConsoleOtpSender().send(OtpPurpose.START_WORK, "9000000001", "999999",
                             meta="booking_id=b1")
-    assert "booking_id=b1" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
+    assert last_console_code("start_work", "9000000001") == "999999"
 
 
 def test_default_sender_console_and_whatsapp(monkeypatch):

@@ -357,4 +357,5 @@ class Product(Base):
     price_offer: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     image_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     image_mime: Mapped[str] = mapped_column(String(40), default="")
+    image_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

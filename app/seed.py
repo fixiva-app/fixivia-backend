@@ -94,12 +94,21 @@ def seed_if_empty(db: Session) -> None:
 
 
 def ensure_dev_users(db: Session) -> list[User]:
-    """Idempotent: one user per role for local testing. Safe to re-run."""
+    """Idempotent: one user per role for local testing. Safe to re-run.
+
+    Base data (geo/catalog/partner org) is seeded in every flavor;
+    the demo user accounts are skipped on prod.
+    """
+    from app.config import settings
+
     if db.scalar(select(Pincode).limit(1)) is None:
         _seed_geo_and_catalog(db)
     partner = db.scalar(select(Partner).limit(1))
     if partner is None:
         partner = _seed_partner_org(db)
+    if settings.flavor == "prod":
+        db.commit()
+        return []
     cats = list(db.scalars(select(ServiceCategory)))
     users: list[User] = []
     for spec in DEV_ACCOUNTS:
@@ -260,6 +269,18 @@ def _seed_image_bytes(name: str | None) -> tuple[bytes | None, str]:
     return img.read_bytes(), _IMAGE_MIME.get(img.suffix.lower(), "application/octet-stream")
 
 
+def _store_seed_image(product: Product, data: bytes, mime: str) -> None:
+    """Seed-time image store: R2 when configured, else DB blob."""
+    from app.services import image_store
+
+    product.image_mime = mime
+    if image_store.r2_enabled():
+        product.image_key = image_store.put_product_image(product.id, data, mime)
+        product.image_bytes = None
+    else:
+        product.image_bytes = data
+
+
 def _seed_products(db: Session) -> None:
     path = Path(__file__).resolve().parent / "data" / "products_seed.json"
     rows = json.loads(path.read_text())
@@ -267,16 +288,16 @@ def _seed_products(db: Session) -> None:
         existing = db.scalar(select(Product).where(Product.sku == r["sku"]))
         if existing is not None:
             # Backfill: rows seeded before images existed get theirs now.
-            if existing.image_bytes is None:
+            if existing.image_bytes is None and not existing.image_key:
                 data, mime = _seed_image_bytes(r.get("image_file"))
                 if data is not None:
-                    existing.image_bytes = data
-                    existing.image_mime = mime
+                    _store_seed_image(existing, data, mime)
             continue
         fields = {k: v for k, v in r.items() if k != "image_file"}
         product = Product(**fields)
-        data, mime = _seed_image_bytes(r.get("image_file"))
-        product.image_bytes = data
-        product.image_mime = mime
         db.add(product)
+        db.flush()  # id assigned for the R2 object key
+        data, mime = _seed_image_bytes(r.get("image_file"))
+        if data is not None:
+            _store_seed_image(product, data, mime)
     db.flush()

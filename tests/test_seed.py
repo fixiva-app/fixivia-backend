@@ -44,6 +44,16 @@ def _counts(db):
     }
 
 
+def test_ensure_dev_users_skips_accounts_on_prod(fresh_db, monkeypatch):
+    monkeypatch.setattr("app.config.settings.flavor", "prod")
+    users = ensure_dev_users(fresh_db)
+    assert users == []
+    assert fresh_db.scalar(select(User).limit(1)) is None
+    # base data still seeds on prod
+    assert fresh_db.scalar(select(Pincode).limit(1)) is not None
+    assert fresh_db.scalar(select(Partner).limit(1)) is not None
+
+
 def test_seed_if_empty_full_then_idempotent(fresh_db):
     seed_if_empty(fresh_db)
     assert _counts(fresh_db) == {

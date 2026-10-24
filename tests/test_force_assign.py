@@ -9,8 +9,9 @@ from tests.conftest import make_client
 
 def _login(client, capsys, mobile, purpose="login", **reg):
     client.post("/v1/otp/request", json={"mobile": mobile, "purpose": purpose})
-    printed = capsys.readouterr().out
-    code = [p for p in printed.split() if p.startswith("code=")][-1].split("=", 1)[1]
+    from tests.conftest import admin_otp_code
+
+    code = admin_otp_code(client, mobile, purpose)
     body = {"mobile": mobile, "purpose": purpose, "code": code, **reg}
     r = client.post("/v1/otp/verify", json=body)
     assert r.status_code == 200, r.text
@@ -98,16 +99,24 @@ def test_force_assign_after_failed_cycle(capsys):
         assert ready.json()["technicians"], "seed SP should be assignable"
         sp_id = ready.json()["technicians"][0]["id"]
 
-        capsys.readouterr()
         done = client.post(f"/v1/bookings/{bid}/force-assign", headers=h_o, json={"service_partner_id": sp_id})
         assert done.status_code == 200, done.text
         body = done.json()
         assert body["status"] == "assigned"
         assert body["assigned_sp_id"] == sp_id
         assert body["first_accepted_at"] is not None
-        printed = capsys.readouterr().out
-        assert "purpose=start_work" in printed
-        assert "REUSE" not in printed
+        from app.config import settings
+
+        generated = client.get(
+            f"/v1/admin/otp-code?booking_id={bid}",
+            headers={
+                "X-Otp-Admin-User": settings.otp_admin_user,
+                "X-Otp-Admin-Pass": settings.otp_admin_pass,
+            },
+        )
+        assert generated.status_code == 200, generated.text
+        assert generated.json()["purpose"] == "start_work"
+        assert "REUSE" not in capsys.readouterr().out
 
         assert "booking_confirmed" in _types(client, h_c, bid)
         assert "filled" in _types(client, h_o, bid)
