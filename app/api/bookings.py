@@ -100,6 +100,33 @@ def _addr(a: CustomerAddress) -> dict:
     }
 
 
+@router.delete("/addresses/{address_id}")
+def delete_address(
+    address_id: str,
+    user: User = Depends(require_roles("customer")),
+    db: Session = Depends(get_db),
+) -> dict:
+    a = db.get(CustomerAddress, address_id)
+    if a is None or a.user_id != user.id:
+        raise HTTPException(404, "address_not_found")
+    used = db.scalar(select(Booking.id).where(Booking.address_id == a.id))
+    if used is not None:
+        raise HTTPException(409, "address_in_use")
+    was_default = a.is_default
+    db.delete(a)
+    db.flush()  # autoflush is off: the fallback query must not see the doomed row
+    if was_default:
+        nxt = db.scalar(
+            select(CustomerAddress)
+            .where(CustomerAddress.user_id == user.id)
+            .order_by(CustomerAddress.line1)
+            .limit(1)
+        )
+        if nxt is not None:
+            nxt.is_default = True
+    return {"ok": True, "id": address_id}
+
+
 class BookingCreate(BaseModel):
     address_id: str
     category_id: str
@@ -476,6 +503,30 @@ def complete_booking(
     if body.rating:
         b.rating = body.rating
         b.rating_comment = body.rating_comment
+    return _booking_json(db, b, user)
+
+
+class RateBody(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/bookings/{booking_id}/rate")
+def rate_booking(
+    booking_id: str,
+    body: RateBody,
+    user: User = Depends(require_roles("customer")),
+    db: Session = Depends(get_db),
+) -> dict:
+    b = db.get(Booking, booking_id)
+    if b is None:
+        raise HTTPException(404, "not_found")
+    if b.customer_id != user.id or b.status != "completed":
+        raise HTTPException(403, "forbidden")
+    if b.rating is not None:
+        raise HTTPException(409, "already_rated")
+    b.rating = body.rating
+    b.rating_comment = body.comment
     return _booking_json(db, b, user)
 
 

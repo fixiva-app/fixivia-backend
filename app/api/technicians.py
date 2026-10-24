@@ -20,6 +20,7 @@ from app.models import (
     ServicePartnerPincode,
     ServicePartnerProfile,
     User,
+    as_utc_aware,
     utcnow,
 )
 from app.services.notify import audit
@@ -196,6 +197,33 @@ def earnings(user: User = Depends(require_roles("service_partner")), db: Session
         else:
             pending += r.amount
     return {"pending": str(pending), "paid": str(paid), "jobs": len(rows)}
+
+
+@router.get("/payouts")
+def list_payouts(
+    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    rows = db.scalars(
+        select(PayoutLedger)
+        .where(PayoutLedger.partner_id == user.partner_id)
+        .order_by(PayoutLedger.id)
+    )
+    out = []
+    for r in rows:
+        sp = db.get(User, r.service_partner_id)
+        out.append(
+            {
+                "id": r.id,
+                "booking_id": r.booking_id,
+                "service_partner_id": r.service_partner_id,
+                "sp_name": sp.full_name if sp else "",
+                "amount": str(r.amount),
+                "status": r.status,
+                "paid_at": as_utc_aware(r.paid_at).isoformat() if r.paid_at else None,
+            }
+        )
+    return out
 
 
 @router.post("/payouts/{payout_id}/paid")

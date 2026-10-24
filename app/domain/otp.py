@@ -12,6 +12,7 @@ class OtpPurpose(StrEnum):
     REGISTER = "register"
     LOGIN = "login"
     START_WORK = "start_work"
+    MOBILE_CHANGE = "mobile_change"
 
 
 def generate_code() -> str:
