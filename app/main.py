@@ -11,6 +11,7 @@ from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
 from app.api.me import router as me_router
 from app.api.partners import router as partners_router
+from app.api.products import router as products_router
 from app.api.technicians import router as tech_router
 from app.config import settings
 from app.db import SessionLocal, init_db
@@ -43,6 +44,7 @@ app.include_router(auth_router)
 app.include_router(me_router)
 app.include_router(partners_router)
 app.include_router(catalog_router)
+app.include_router(products_router)
 app.include_router(bookings_router)
 app.include_router(tech_router)
 app.include_router(analytics_router)

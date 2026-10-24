@@ -11,6 +11,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -317,3 +319,28 @@ class AuditLog(Base):
     entity_id: Mapped[str] = mapped_column(String(36))
     meta: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Product(Base):
+    __tablename__ = "products"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(200))
+    brand: Mapped[str] = mapped_column(String(40), index=True)
+    model: Mapped[str] = mapped_column(String(120), default="")
+    sku: Mapped[str] = mapped_column(String(80), unique=True)
+    category: Mapped[str] = mapped_column(String(80), index=True)
+    subcategory: Mapped[str] = mapped_column(String(80), default="")
+    capacity: Mapped[str] = mapped_column(String(120), default="")
+    technology: Mapped[str] = mapped_column(String(200), default="")
+    application: Mapped[str] = mapped_column(String(200), default="")
+    badge: Mapped[str] = mapped_column(String(80), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    features: Mapped[list] = mapped_column(JSON, default=list)
+    specifications: Mapped[dict] = mapped_column(JSON, default=dict)
+    applications: Mapped[list] = mapped_column(JSON, default=list)
+    source_url: Mapped[str] = mapped_column(String(300), default="")
+    price_mrp: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    price_offer: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    image_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    image_mime: Mapped[str] = mapped_column(String(40), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
