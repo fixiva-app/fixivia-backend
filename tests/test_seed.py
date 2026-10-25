@@ -46,12 +46,23 @@ def _counts(db):
 
 def test_ensure_dev_users_skips_accounts_on_prod(fresh_db, monkeypatch):
     monkeypatch.setattr("app.config.settings.flavor", "prod")
+    monkeypatch.setattr("app.config.settings.master_mobile", "")
     users = ensure_dev_users(fresh_db)
     assert users == []
     assert fresh_db.scalar(select(User).limit(1)) is None
     # base data still seeds on prod
     assert fresh_db.scalar(select(Pincode).limit(1)) is not None
     assert fresh_db.scalar(select(Partner).limit(1)) is not None
+
+
+def test_ensure_dev_users_seeds_master_from_env_on_prod(fresh_db, monkeypatch):
+    monkeypatch.setattr("app.config.settings.flavor", "prod")
+    monkeypatch.setattr("app.config.settings.master_mobile", "919999999999")
+    users = ensure_dev_users(fresh_db)
+    assert [u.mobile for u in users] == ["919999999999"]
+    assert users[0].role == "master_admin"
+    # idempotent re-run
+    assert [u.mobile for u in ensure_dev_users(fresh_db)] == ["919999999999"]
 
 
 def test_seed_if_empty_full_then_idempotent(fresh_db):

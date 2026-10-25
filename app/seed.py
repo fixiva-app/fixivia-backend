@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import (
     Partner,
     PartnerCategoryPricing,
@@ -86,7 +87,8 @@ def seed_if_empty(db: Session) -> None:
     if db.scalar(select(User).limit(1)) is None:
         _seed_geo_and_catalog(db)
         _seed_partner_org(db)
-        _seed_invoice(db)
+        if settings.flavor != "prod":
+            _seed_invoice(db)
     # Unconditional: _seed_products is idempotent and backfills images
     # for rows seeded before product_images existed.
     _seed_products(db)
@@ -96,19 +98,34 @@ def seed_if_empty(db: Session) -> None:
 def ensure_dev_users(db: Session) -> list[User]:
     """Idempotent: one user per role for local testing. Safe to re-run.
 
-    Base data (geo/catalog/partner org) is seeded in every flavor;
-    the demo user accounts are skipped on prod.
+    Base data (geo/catalog/partner org) is seeded in every flavor. On
+    prod, demo accounts are skipped; instead the MASTER_MOBILE number
+    (if set) gets the single master_admin account.
     """
-    from app.config import settings
-
     if db.scalar(select(Pincode).limit(1)) is None:
         _seed_geo_and_catalog(db)
     partner = db.scalar(select(Partner).limit(1))
     if partner is None:
         partner = _seed_partner_org(db)
     if settings.flavor == "prod":
+        users: list[User] = []
+        if settings.master_mobile.strip():
+            user = db.scalar(select(User).where(User.mobile == settings.master_mobile.strip()))
+            if user is None:
+                user = _create_dev_user(
+                    db,
+                    partner,
+                    [],
+                    {
+                        "role": "master_admin",
+                        "mobile": settings.master_mobile.strip(),
+                        "full_name": "Fixiva Master",
+                        "email": "master@fixiva",
+                    },
+                )
+            users.append(user)
         db.commit()
-        return []
+        return users
     cats = list(db.scalars(select(ServiceCategory)))
     users: list[User] = []
     for spec in DEV_ACCOUNTS:
