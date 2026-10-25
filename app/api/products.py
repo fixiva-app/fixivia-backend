@@ -150,11 +150,13 @@ def get_product_image(product_id: str, db: Session = Depends(get_db)):
         except Exception:
             raise HTTPException(502, "image_store_error") from None
         return Response(content=data,
-                        media_type=product.image_mime or "application/octet-stream")
+                        media_type=product.image_mime or "application/octet-stream",
+                        headers={"Cache-Control": "public, max-age=3600"})
     if not product.image_bytes:
         raise HTTPException(404, "not_found")
     return Response(content=product.image_bytes,
-                    media_type=product.image_mime or "application/octet-stream")
+                    media_type=product.image_mime or "application/octet-stream",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.post("/products")
