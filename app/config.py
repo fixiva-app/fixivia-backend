@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+pysqlite:///./fixvia.db"
     seed_on_start: bool = True
     cors_origins: str = "*"
+    # Prod only: mobile that gets the master_admin account on first boot.
+    # Empty = no users seeded.
+    master_mobile: str = ""
     whatsapp_enabled: bool = False
     whatsapp_api_base: str = ""
     whatsapp_api_key: str = ""

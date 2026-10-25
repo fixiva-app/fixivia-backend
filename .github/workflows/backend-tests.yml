@@ -21,3 +21,32 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run unit tests with coverage gate
         run: python -m pytest tests/ -q --cov=app --cov-branch --cov-fail-under=90
+
+  deploy:
+    name: deploy to Cloud Run
+    needs: unit-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGION: asia-south1
+      SERVICE: fixiva-api
+      REPO: fixiva
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and push image
+        run: |-
+          IMAGE="$REGION-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/$REPO/api:${{ github.sha }}"
+          gcloud builds submit --region="$REGION" --tag="$IMAGE" .
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Deploy revision (env/secrets stay on the service)
+        run: |-
+          gcloud run deploy "$SERVICE" --region="$REGION" \
+            --image="$IMAGE" --platform=managed
