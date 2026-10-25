@@ -10,6 +10,7 @@ from app.api.bookings import router as bookings_router
 from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
 from app.api.me import router as me_router
+from app.api.otp_admin import router as otp_admin_router  # TEMP-OTP
 from app.api.partners import router as partners_router
 from app.api.products import router as products_router
 from app.api.technicians import router as tech_router
@@ -33,7 +34,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Fixvia API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,6 +43,7 @@ app.include_router(health_router)
 app.include_router(dev_router)
 app.include_router(auth_router)
 app.include_router(me_router)
+app.include_router(otp_admin_router)  # TEMP-OTP
 app.include_router(partners_router)
 app.include_router(catalog_router)
 app.include_router(products_router)

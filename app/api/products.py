@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db import CommitRoute, get_db
 from app.deps import require_roles
 from app.models import Product, User
+from app.services import image_store
 from app.services.notify import audit
 
 router = APIRouter(prefix="/v1", tags=["products"], route_class=CommitRoute)
@@ -39,7 +40,7 @@ def _product_json(p: Product) -> dict:
         "source_url": p.source_url,
         "price_mrp": str(p.price_mrp) if p.price_mrp is not None else None,
         "price_offer": str(p.price_offer) if p.price_offer is not None else None,
-        "has_image": p.image_bytes is not None,
+        "has_image": p.image_bytes is not None or bool(p.image_key),
         "image_mime": p.image_mime,
         "is_active": p.is_active,
     }
@@ -141,10 +142,21 @@ def get_product(product_id: str, db: Session = Depends(get_db)) -> dict:
 @router.get("/products/{product_id}/image")
 def get_product_image(product_id: str, db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
-    if product is None or not product.image_bytes:
+    if product is None:
+        raise HTTPException(404, "not_found")
+    if product.image_key and image_store.r2_enabled():
+        try:
+            data = image_store.get_product_image(product.image_key)
+        except Exception:
+            raise HTTPException(502, "image_store_error") from None
+        return Response(content=data,
+                        media_type=product.image_mime or "application/octet-stream",
+                        headers={"Cache-Control": "public, max-age=3600"})
+    if not product.image_bytes:
         raise HTTPException(404, "not_found")
     return Response(content=product.image_bytes,
-                    media_type=product.image_mime or "application/octet-stream")
+                    media_type=product.image_mime or "application/octet-stream",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.post("/products")
@@ -191,6 +203,10 @@ async def create_product(
     )
     db.add(product)
     db.flush()
+    if data is not None and image_store.r2_enabled():
+        product.image_key = image_store.put_product_image(product.id, data, mime)
+        product.image_bytes = None
+        db.flush()
     audit(db, user.id, "product_create", "product", product.id)
     return _product_json(product)
 
@@ -264,7 +280,13 @@ async def update_product(
         product.price_offer = _opt_decimal(price_offer, "price_offer")
     data, mime = await _read_image(image)
     if data is not None:
-        product.image_bytes = data
+        # One live store at a time: the write sets one, clears the other.
+        if image_store.r2_enabled():
+            product.image_key = image_store.put_product_image(product.id, data, mime)
+            product.image_bytes = None
+        else:
+            product.image_bytes = data
+            product.image_key = None
         product.image_mime = mime
     db.flush()
     audit(db, user.id, "product_update", "product", product.id)

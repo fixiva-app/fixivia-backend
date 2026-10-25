@@ -19,8 +19,9 @@ def _mobile():
 def _code(client, capsys, mobile, purpose):
     r = client.post("/v1/otp/request", json={"mobile": mobile, "purpose": purpose})
     assert r.status_code == 200, r.text
-    printed = capsys.readouterr().out
-    return [p for p in printed.split() if p.startswith("code=")][-1].split("=", 1)[1]
+    from tests.conftest import admin_otp_code
+
+    return admin_otp_code(client, mobile, purpose)
 
 
 def _verify(client, mobile, purpose, code, **extra):

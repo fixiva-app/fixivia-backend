@@ -9,9 +9,10 @@ from tests.test_bookings_api import _headers, _start_code
 from tests.test_force_assign import _book, _login
 
 
-def _last_code(capsys):
-    printed = capsys.readouterr().out
-    return [p for p in printed.split() if p.startswith("code=")][-1].split("=", 1)[1]
+def _last_code(client, mobile, purpose):
+    from tests.conftest import admin_otp_code
+
+    return admin_otp_code(client, mobile, purpose)
 
 
 def _fresh_sp_here(client, capsys, partner_id, mobile):
@@ -64,7 +65,7 @@ def test_mobile_change_full_loop(capsys):
         r = client.post("/v1/me/mobile/request", headers=h,
                         json={"mobile": "9198000012"})
         assert r.json() == {"sent": True}, r.text
-        code = _last_code(capsys)
+        code = _last_code(client, "9198000012", "mobile_change")
         bad = client.post("/v1/me/mobile/confirm", headers=h,
                           json={"mobile": "9198000012", "code": "000000"})
         assert bad.status_code == 400, bad.text
@@ -81,7 +82,7 @@ def test_mobile_change_full_loop(capsys):
                     json={"mobile": "9198000011", "purpose": "login"})
         stale = client.post("/v1/otp/verify",
                             json={"mobile": "9198000011", "purpose": "login",
-                                  "code": _last_code(capsys)})
+                                  "code": _last_code(client, "9198000011", "login")})
         assert stale.status_code == 404, stale.text
         # The generic verifier refuses the mobile-change purpose.
         r = client.post("/v1/otp/verify",

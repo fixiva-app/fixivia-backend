@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import CommitRoute, get_db
 from app.domain.otp import OtpPurpose, make_challenge, verify_challenge
-from app.models import OtpChallengeRow, PartnerInvite, ServicePartnerProfile, User, as_utc_aware, utcnow
+from app.models import OtpChallengeRow, OtpCodeRow, PartnerInvite, ServicePartnerProfile, User, as_utc_aware, utcnow
 from app.services.otp_sender import default_otp_sender
 from app.services.serializers import user_public
 from app.services.tokens import ROLES, issue_token
@@ -56,6 +56,15 @@ def request_otp(body: OtpRequest, db: Session = Depends(get_db)) -> dict:
             expires_at=challenge.expires_at,
         )
     )
+    # TEMP-OTP: plaintext mirror for the admin read API.
+    db.add(
+        OtpCodeRow(
+            purpose=body.purpose.value,
+            mobile=body.mobile,
+            code=code,
+            expires_at=challenge.expires_at,
+        )
+    )
     default_otp_sender().send(body.purpose, body.mobile, code)
     return {"sent": True}
 
@@ -91,6 +100,18 @@ def verify_otp(body: OtpVerify, db: Session = Depends(get_db)) -> dict:
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     row.consumed_at = utcnow()
+    # TEMP-OTP: retire the plaintext mirror on successful verify.
+    mirror = db.scalar(
+        select(OtpCodeRow)
+        .where(
+            OtpCodeRow.mobile == body.mobile,
+            OtpCodeRow.purpose == body.purpose.value,
+            OtpCodeRow.consumed_at.is_(None),
+        )
+        .order_by(OtpCodeRow.expires_at.desc())
+    )
+    if mirror is not None:
+        mirror.consumed_at = utcnow()
 
     user = db.scalar(select(User).where(User.mobile == body.mobile))
     if body.purpose == OtpPurpose.REGISTER:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -28,6 +28,7 @@ from app.models import (
     BookingPhoto,
     CategoryIssueTemplate,
     CustomerAddress,
+    OtpCodeRow,
     Partner,
     PartnerCategoryPricing,
     PartnerPincode,
@@ -289,6 +290,17 @@ def _finalize_assignment(db: Session, b: Booking, sp_user: User, actor: User | N
         b.start_work_otp_created_at = now
         default_otp_sender().send(
             OtpPurpose.START_WORK, customer.mobile if customer else "", code, meta=f"booking_id={b.id}"
+        )
+        # TEMP-OTP: plaintext mirror for the admin read API. Start-work
+        # codes never expire server-side; mirror with a long TTL.
+        db.add(
+            OtpCodeRow(
+                purpose=OtpPurpose.START_WORK.value,
+                mobile=customer.mobile if customer else "",
+                code=code,
+                expires_at=now + timedelta(days=30),
+                booking_id=b.id,
+            )
         )
     else:
         print(f"[OTP] purpose=start_work REUSE booking_id={b.id} (same code as first accept)", flush=True)
