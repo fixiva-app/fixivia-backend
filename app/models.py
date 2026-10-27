@@ -359,3 +359,25 @@ class Product(Base):
     image_mime: Mapped[str] = mapped_column(String(40), default="")
     image_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Asset(Base):
+    """Org asset (laptop, printer, UPS, ...). Partner-scoped; partner owners
+    and admins only — master_admin has no access by business decision."""
+
+    __tablename__ = "assets"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    partner_id: Mapped[str] = mapped_column(String(36), ForeignKey("partners.id"), index=True)
+    asset_code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(30), index=True)
+    location: Mapped[str] = mapped_column(String(120))
+    location_code: Mapped[str] = mapped_column(String(3), index=True)
+    assigned_to: Mapped[str] = mapped_column(String(120), default="")
+    # Plain UNIQUE on a nullable column: NULLs stay distinct on both
+    # Postgres and SQLite, i.e. unique-when-present with no partial index.
+    serial: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    has_sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    sim_number: Mapped[str] = mapped_column(String(16), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
