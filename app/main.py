@@ -10,6 +10,7 @@ from app.api.dev import router as dev_router
 from app.api.bookings import router as bookings_router
 from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
+from app.api.locations import router as locations_router
 from app.api.me import router as me_router
 from app.api.otp_admin import router as otp_admin_router  # TEMP-OTP
 from app.api.partners import router as partners_router
@@ -52,3 +53,4 @@ app.include_router(bookings_router)
 app.include_router(tech_router)
 app.include_router(analytics_router)
 app.include_router(assets_router)
+app.include_router(locations_router)

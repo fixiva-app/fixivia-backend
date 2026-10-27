@@ -221,3 +221,74 @@ def test_list_filters(capsys):
         assert [a["name"] for a in by_q] == [f"FilterMe {tag}"]
         by_loc = client.get("/v1/assets?location_code=m13", headers=h).json()
         assert {a["name"] for a in by_loc} >= {f"FilterMe {tag}", f"Other {tag}"}
+
+
+def test_gap_fill_reuses_smallest_free_number(capsys):
+    with make_client() as client:
+        h = _h(_token(client, capsys, OWNER))
+        loc = "G" + uuid.uuid4().hex[:2].upper()
+        ids = []
+        for _ in range(3):
+            r = client.post("/v1/assets", json=_payload(loc), headers=h)
+            assert r.status_code == 200, r.text
+            ids.append(r.json()["id"])
+        # Delete the middle one (0002); next create must fill the gap.
+        assert client.delete(f"/v1/assets/{ids[1]}", headers=h).status_code == 200
+        nxt = client.post("/v1/assets", json=_payload(loc), headers=h)
+        assert nxt.json()["asset_code"] == f"AST-{loc}-0002", nxt.json()
+        again = client.post("/v1/assets", json=_payload(loc), headers=h)
+        assert again.json()["asset_code"] == f"AST-{loc}-0004", again.json()
+
+
+def test_explicit_asset_code_claim(capsys):
+    with make_client() as client:
+        h = _h(_token(client, capsys, OWNER))
+        loc = "X" + uuid.uuid4().hex[:2].upper()
+        tag = f"AST-{loc}-0005"
+        claimed = client.post("/v1/assets", json=_payload(loc, asset_code=tag), headers=h)
+        assert claimed.status_code == 200, claimed.text
+        assert claimed.json()["asset_code"] == tag
+        # Same tag twice → taken.
+        dup = client.post("/v1/assets", json=_payload(loc, asset_code=tag.lower()), headers=h)
+        assert dup.status_code == 409, dup.text
+        assert dup.json()["detail"] == "asset_code_taken"
+        # Gap-fill skips the claimed 0005: next manuals are 1,2,3,4,6.
+        got = []
+        for _ in range(5):
+            r = client.post("/v1/assets", json=_payload(loc), headers=h)
+            got.append(r.json()["asset_code"])
+        assert got == [f"AST-{loc}-{n:04d}" for n in (1, 2, 3, 4, 6)], got
+
+
+def test_explicit_asset_code_validation(capsys):
+    with make_client() as client:
+        h = _h(_token(client, capsys, OWNER))
+        loc = "V" + uuid.uuid4().hex[:2].upper()
+        for bad in ("nope", f"AST-{loc}-0000", "AST-Y99-0001", f"ast-{loc.lower()}-1"):
+            r = client.post("/v1/assets", json=_payload(loc, asset_code=bad), headers=h)
+            assert r.status_code == 422, (bad, r.text)
+            assert r.json()["detail"] == "bad_asset_code"
+
+
+def test_print_blank_tags_reserves_and_consumes(capsys):
+    with make_client() as client:
+        h = _h(_token(client, capsys, OWNER))
+        loc = "P" + uuid.uuid4().hex[:2].upper()
+        printed = client.post("/v1/asset-tags/print", json={"location_code": loc, "count": 3}, headers=h)
+        assert printed.status_code == 200, printed.text
+        assert printed.json()["codes"] == [f"AST-{loc}-{n:04d}" for n in (1, 2, 3)]
+        # Reservations are skipped by gap-fill…
+        nxt = client.post("/v1/assets", json=_payload(loc), headers=h)
+        assert nxt.json()["asset_code"] == f"AST-{loc}-0004", nxt.json()
+        # …but claimable explicitly, which consumes the reservation.
+        claim = client.post(
+            "/v1/assets", json=_payload(loc, asset_code=f"AST-{loc}-0002"), headers=h
+        )
+        assert claim.status_code == 200, claim.text
+        # Second print run skips assets AND live reservations.
+        again = client.post("/v1/asset-tags/print", json={"location_code": loc, "count": 2}, headers=h)
+        assert again.json()["codes"] == [f"AST-{loc}-{n:04d}" for n in (5, 6)], again.json()
+        bad = client.post("/v1/asset-tags/print", json={"location_code": loc, "count": 0}, headers=h)
+        assert bad.status_code == 422
+        assert client.post("/v1/asset-tags/print", json={"location_code": loc, "count": 2},
+                           headers=_h(_token(client, capsys, MASTER))).status_code == 403

@@ -21,7 +21,17 @@ from app.models import (
     ServicePartnerCategory,
     ServicePartnerPincode,
     ServicePartnerProfile,
+    ShopLocation,
     User,
+)
+
+# Real Fixiva business owner (run/fixiva-business). Shop locations seed for
+# this partner only; demo/test partners create their own via POST /v1/locations.
+FIXIVA_OWNER_MOBILE = "9497473617"
+FIXIVA_SHOPS = (
+    ("Payyannur", "PNR"),
+    ("Koothuparamba", "KPB"),
+    ("Keecheri", "KHR"),
 )
 
 # Demo mobiles for local testing only. OTP login; or POST /v1/dev/inject-users.
@@ -87,6 +97,25 @@ def seed_if_empty(db: Session) -> None:
     # for rows seeded before product_images existed.
     _seed_products(db)
     ensure_dev_users(db)
+    ensure_shop_locations(db)
+
+
+def ensure_shop_locations(db: Session) -> None:
+    """Idempotent: seed the real Fixiva shops. No-op when the Fixiva
+    owner is absent (fresh demo/test databases). Safe to re-run."""
+    owner = db.scalar(select(User).where(User.mobile == FIXIVA_OWNER_MOBILE))
+    if owner is None or not owner.partner_id:
+        return
+    for name, code in FIXIVA_SHOPS:
+        exists = db.scalar(
+            select(ShopLocation).where(
+                ShopLocation.partner_id == owner.partner_id,
+                ShopLocation.code == code,
+            )
+        )
+        if exists is None:
+            db.add(ShopLocation(partner_id=owner.partner_id, name=name, code=code))
+    db.commit()
 
 
 def ensure_dev_users(db: Session) -> list[User]:

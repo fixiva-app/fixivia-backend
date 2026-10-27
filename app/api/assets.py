@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db import CommitRoute, get_db
 from app.deps import require_roles
-from app.models import Asset, User
+from app.models import Asset, AssetTagReservation, User, utcnow
 from app.services.notify import audit
 
 router = APIRouter(prefix="/v1", tags=["assets"], route_class=CommitRoute)
@@ -34,7 +34,9 @@ ASSET_CATEGORIES = (
 
 _CODE_RE = re.compile(r"^[A-Z0-9]{3}$")
 _SIM_RE = re.compile(r"^\d{10}$")
+_TAG_RE = re.compile(r"^AST-([A-Z0-9]{3})-(\d{4})$")
 _MAX_SEQ = 9999
+_MAX_PRINT = 200
 
 
 def _asset_json(a: Asset) -> dict:
@@ -101,24 +103,68 @@ def _check_serial_free(db: Session, serial: str | None, ignore_id: str | None = 
         raise HTTPException(409, "serial_taken")
 
 
-def _next_code(db: Session, partner_id: str, loc: str) -> str:
+def _used_numbers(db: Session, partner_id: str, loc: str) -> set[int]:
+    """Numbers taken by assets or unconsumed pre-print reservations."""
     prefix = f"AST-{loc}-"
-    codes = db.scalars(
-        select(Asset.asset_code).where(
-            Asset.partner_id == partner_id,
-            Asset.asset_code.like(prefix + "%"),
+    codes = list(
+        db.scalars(
+            select(Asset.asset_code).where(
+                Asset.partner_id == partner_id,
+                Asset.asset_code.like(prefix + "%"),
+            )
         )
     )
-    best = 0
+    codes += list(
+        db.scalars(
+            select(AssetTagReservation.asset_code).where(
+                AssetTagReservation.partner_id == partner_id,
+                AssetTagReservation.asset_code.like(prefix + "%"),
+                AssetTagReservation.consumed_at.is_(None),
+            )
+        )
+    )
+    used: set[int] = set()
     for code in codes:
         try:
-            best = max(best, int(code.rsplit("-", 1)[1]))
+            used.add(int(code.rsplit("-", 1)[1]))
         except (ValueError, IndexError):
             continue
-    nxt = best + 1
-    if nxt > _MAX_SEQ:
-        raise HTTPException(409, "code_exhausted")
-    return f"{prefix}{nxt:04d}"
+    return used
+
+
+def _next_code(db: Session, partner_id: str, loc: str) -> str:
+    """Smallest free number: gaps fill first (1,2,5 → next is 3)."""
+    used = _used_numbers(db, partner_id, loc)
+    for nxt in range(1, _MAX_SEQ + 1):
+        if nxt not in used:
+            return f"AST-{loc}-{nxt:04d}"
+    raise HTTPException(409, "code_exhausted")
+
+
+def _explicit_code(db: Session, partner_id: str, loc: str, raw: str) -> str:
+    """Validate a claimed pre-printed tag; consume its reservation if any."""
+    tag = (raw or "").strip().upper()
+    m = _TAG_RE.match(tag)
+    if not m or m.group(1) != loc or m.group(2) == "0000":
+        raise HTTPException(422, "bad_asset_code")
+    taken = db.scalar(
+        select(Asset.id).where(
+            Asset.partner_id == partner_id,
+            Asset.asset_code == tag,
+        )
+    )
+    if taken is not None:
+        raise HTTPException(409, "asset_code_taken")
+    reserved = db.scalar(
+        select(AssetTagReservation).where(
+            AssetTagReservation.partner_id == partner_id,
+            AssetTagReservation.asset_code == tag,
+            AssetTagReservation.consumed_at.is_(None),
+        )
+    )
+    if reserved is not None:
+        reserved.consumed_at = utcnow()
+    return tag
 
 
 def _get_asset(db: Session, user: User, asset_id: str) -> Asset:
@@ -139,6 +185,7 @@ class AssetCreate(BaseModel):
     category: str
     location: str
     location_code: str
+    asset_code: str | None = None
     assigned_to: str = ""
     serial: str | None = None
     has_sim: bool = False
@@ -236,6 +283,46 @@ def get_asset(
     return _asset_json(_get_asset(db, user, asset_id))
 
 
+class TagPrintRequest(BaseModel):
+    model_config = _stripped()
+
+    location_code: str
+    count: int = 12
+
+    @field_validator("location_code")
+    @classmethod
+    def _loc(cls, v: str) -> str:
+        return _location_code(v)
+
+
+@router.post("/asset-tags/print")
+def print_blank_tags(
+    body: TagPrintRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*_ADMIN)),
+) -> dict:
+    """Reserve the next free numbers and return them for blank-tag printing.
+    Reservations keep gap-fill from reusing printed-but-unclaimed numbers."""
+    if not user.partner_id:
+        raise HTTPException(403, "no_partner")
+    if body.count < 1 or body.count > _MAX_PRINT:
+        raise HTTPException(422, "bad_print_count")
+    used = _used_numbers(db, user.partner_id, body.location_code)
+    codes: list[str] = []
+    for nxt in range(1, _MAX_SEQ + 1):
+        if nxt not in used:
+            codes.append(f"AST-{body.location_code}-{nxt:04d}")
+            if len(codes) >= body.count:
+                break
+    if len(codes) < body.count:
+        raise HTTPException(409, "code_exhausted")
+    for code in codes:
+        db.add(AssetTagReservation(partner_id=user.partner_id, asset_code=code))
+    db.flush()
+    audit(db, user.id, "asset_tags_print", "asset_tag_reservation", codes[0])
+    return {"location_code": body.location_code, "codes": codes}
+
+
 @router.post("/assets")
 def create_asset(
     body: AssetCreate,
@@ -245,9 +332,13 @@ def create_asset(
     if not user.partner_id:
         raise HTTPException(403, "no_partner")
     _check_serial_free(db, body.serial)
+    if body.asset_code:
+        asset_code = _explicit_code(db, user.partner_id, body.location_code, body.asset_code)
+    else:
+        asset_code = _next_code(db, user.partner_id, body.location_code)
     asset = Asset(
         partner_id=user.partner_id,
-        asset_code=_next_code(db, user.partner_id, body.location_code),
+        asset_code=asset_code,
         name=body.name,
         category=body.category,
         location=body.location,

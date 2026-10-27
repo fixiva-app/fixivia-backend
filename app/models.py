@@ -363,6 +363,32 @@ class Product(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class ShopLocation(Base):
+    """Shop/warehouse location of a partner. Assets reference the location
+    by code; the code is immutable once created (printed on QR tags)."""
+
+    __tablename__ = "partner_locations"
+    __table_args__ = (UniqueConstraint("partner_id", "code", name="uq_partner_location_code"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    partner_id: Mapped[str] = mapped_column(String(36), ForeignKey("partners.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    code: Mapped[str] = mapped_column(String(3), index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AssetTagReservation(Base):
+    """Pre-printed QR tag that is not an asset yet. Gap-fill skips these
+    numbers; claiming the tag (scan-to-prefill) consumes the reservation."""
+
+    __tablename__ = "asset_tag_reservations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    partner_id: Mapped[str] = mapped_column(String(36), ForeignKey("partners.id"), index=True)
+    asset_code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Asset(Base):
     """Org asset (laptop, printer, UPS, ...). Partner-scoped; partner owners
     only — master_admin has no access by business decision."""
