@@ -21,7 +21,7 @@ def test_me_shape(capsys):
 
 def test_repool_requires_master(capsys):
     with make_client() as client:
-        for mobile in ("9000000004", "9000000003", "9000000002", "9000000005"):
+        for mobile in ("9000000004", "9000000003", "9000000002"):
             who = _login(client, capsys, mobile)
             r = client.post("/v1/jobs/dispatch-repool",
                             headers=_headers(who["token"]))

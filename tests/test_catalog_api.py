@@ -113,7 +113,7 @@ def test_update_roundtrip_and_errors(capsys):
 
 def test_category_write_rbac(capsys):
     with make_client() as client:
-        for mobile in ("9000000004", "9000000003", "9000000002", "9000000005"):
+        for mobile in ("9000000004", "9000000003", "9000000002"):
             who = _login(client, capsys, mobile)
             h = _headers(who["token"])
             assert client.post("/v1/categories", headers=h,
@@ -125,9 +125,8 @@ def test_category_write_rbac(capsys):
 def test_pricing_list_scopes_and_upsert(capsys):
     with make_client() as client:
         owner = _login(client, capsys, "9000000002")
-        admin = _login(client, capsys, "9000000005")
         cust = _login(client, capsys, "9000000004")
-        h_o, h_a, h_c = _headers(owner["token"]), _headers(admin["token"]), _headers(cust["token"])
+        h_o, h_c = _headers(owner["token"]), _headers(cust["token"])
         rows = client.get("/v1/partner/pricing", headers=h_o).json()
         assert rows and set(rows[0]) == {"category_id", "enabled", "visit_charge"}
         r = client.get("/v1/partner/pricing", headers=h_c)
@@ -138,7 +137,7 @@ def test_pricing_list_scopes_and_upsert(capsys):
                        json={"category_id": cat_id, "visit_charge": "777.00"})
         assert r.status_code == 200
         assert r.json()["visit_charge"] == "777.00"
-        r = client.put("/v1/partner/pricing", headers=h_a,
+        r = client.put("/v1/partner/pricing", headers=h_o,
                        json={"category_id": cat_id, "enabled": False,
                              "visit_charge": "777.00"})
         assert r.json()["enabled"] is False

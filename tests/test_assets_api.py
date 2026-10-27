@@ -2,6 +2,8 @@
 
 import uuid
 
+from sqlalchemy import select
+
 from app.db import SessionLocal
 from app.models import Partner, User
 from app.services.tokens import issue_token
@@ -9,7 +11,6 @@ from tests.conftest import make_client
 from tests.test_force_assign import _login
 
 OWNER = "9000000002"
-ADMIN = "9000000005"
 MASTER = "9000000001"
 SP = "9000000003"
 CUSTOMER = "9000000004"
@@ -76,18 +77,25 @@ def test_location_code_uppercased(capsys):
         assert r.json()["asset_code"].startswith("AST-C03-")
 
 
-def test_admin_full_crud(capsys):
+def test_legacy_admin_denied(capsys):
+    """A pre-removal partner_admin row (e.g. prod before cleanup) gets 403."""
     with make_client() as client:
-        h = _h(_token(client, capsys, ADMIN))
-        created = client.post("/v1/assets", json=_payload("D04"), headers=h)
-        assert created.status_code == 200, created.text
-        aid = created.json()["id"]
-        assert client.get("/v1/assets", headers=h).status_code == 200
-        assert client.get(f"/v1/assets/{aid}", headers=h).status_code == 200
-        up = client.put(f"/v1/assets/{aid}", json={"assigned_to": "Anil"}, headers=h)
-        assert up.status_code == 200 and up.json()["assigned_to"] == "Anil"
-        assert client.delete(f"/v1/assets/{aid}", headers=h).status_code == 200
-        assert client.get(f"/v1/assets/{aid}", headers=h).status_code == 404
+        db = SessionLocal()
+        try:
+            partner = db.scalars(select(Partner)).first()
+            mobile = "9" + uuid.uuid4().hex[:9]
+            user = User(role="partner_admin", partner_id=partner.id,
+                        full_name="Legacy Admin", mobile=mobile)
+            db.add(user)
+            db.commit()
+            tok = issue_token(user_id=user.id, role="partner_admin",
+                              partner_id=partner.id)
+        finally:
+            db.close()
+        h = _h(tok)
+        r = client.post("/v1/assets", json=_payload("D04"), headers=h)
+        assert r.status_code == 403 and r.json()["detail"] == "forbidden"
+        assert client.get("/v1/assets", headers=h).status_code == 403
 
 
 def test_master_customer_sp_forbidden(capsys):

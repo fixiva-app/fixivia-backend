@@ -138,7 +138,7 @@ def test_force_assign_rbac(capsys):
         cust = _login(client, capsys, "9000000004")
         sp = _login(client, capsys, "9000000003")
         master = _login(client, capsys, "9000000001")
-        admin = _login(client, capsys, "9000000005")
+        owner = _login(client, capsys, "9000000002")
         h_c = {"Authorization": f"Bearer {cust['token']}"}
         bid, _ = _book(client, h_c, 5)
         for token in (cust["token"], sp["token"], master["token"]):
@@ -146,9 +146,9 @@ def test_force_assign_rbac(capsys):
             assert client.get(f"/v1/bookings/{bid}/assignable", headers=h).status_code == 403
             r = client.post(f"/v1/bookings/{bid}/force-assign", headers=h, json={"service_partner_id": "x"})
             assert r.status_code == 403
-        # partner admin shares the fallback with the owner
-        h_a = {"Authorization": f"Bearer {admin['token']}"}
-        assert client.get(f"/v1/bookings/{bid}/assignable", headers=h_a).status_code == 200
+        # owner reaches the fallback
+        h_o = {"Authorization": f"Bearer {owner['token']}"}
+        assert client.get(f"/v1/bookings/{bid}/assignable", headers=h_o).status_code == 200
 
 
 def test_force_assign_decliner_stays_blocked(capsys):

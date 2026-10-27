@@ -166,7 +166,7 @@ def list_pricing(user: User = Depends(current_user), db: Session = Depends(get_d
 @router.put("/partner/pricing")
 def upsert_pricing(
     body: PriceBody,
-    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("partner_owner",)),
     db: Session = Depends(get_db),
 ) -> dict:
     row = db.get(PartnerCategoryPricing, (user.partner_id, body.category_id))

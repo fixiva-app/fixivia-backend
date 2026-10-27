@@ -173,62 +173,6 @@ def test_assign_pincodes_validates(capsys):
         assert r.json()["detail"].startswith("pincode_taken")
 
 
-def test_admin_request_lifecycle(capsys):
-    with make_client() as client:
-        master = _login(client, capsys, "9000000001")
-        owner = _login(client, capsys, "9000000002")
-        cust = _login(client, capsys, "9000000004")
-        h_m, h_o, h_c = (_headers(master["token"]), _headers(owner["token"]),
-                         _headers(cust["token"]))
-        mobile = str(next(_mobiles))
-        r = client.post("/v1/partner-admin-requests", headers=h_c,
-                        json={"full_name": "X", "mobile": mobile})
-        assert r.status_code == 403
-        created = client.post("/v1/partner-admin-requests", headers=h_o,
-                              json={"full_name": "Unit Admin", "mobile": mobile,
-                                    "email": "ua@x.io"}).json()
-        assert created["status"] == "submitted"
-        own = client.get("/v1/partner-admin-requests", headers=h_o).json()
-        assert created["id"] in [x["id"] for x in own]
-        assert all(x["partner_id"] == owner["user"]["partner_id"] for x in own)
-        all_rows = client.get("/v1/partner-admin-requests", headers=h_m).json()
-        assert created["id"] in [x["id"] for x in all_rows]
-        assert client.get("/v1/partner-admin-requests",
-                          headers=h_c).status_code == 403
-        r = client.post(f"/v1/partner-admin-requests/{created['id']}/review",
-                        headers=h_o, json={"status": "approved"})
-        assert r.status_code == 403
-        r = client.post("/v1/partner-admin-requests/00000000-0000-0000-0000-000000000000/review",
-                        headers=h_m, json={"status": "approved"})
-        assert r.status_code == 404
-        r = client.post(f"/v1/partner-admin-requests/{created['id']}/review",
-                        headers=h_m, json={"status": "maybe"})
-        assert r.status_code == 400
-        rej = client.post(f"/v1/partner-admin-requests/{created['id']}/review",
-                          headers=h_m, json={"status": "rejected"}).json()
-        assert rej["status"] == "rejected" and rej["created_user_id"] is None
-        mobile2 = str(next(_mobiles))
-        created2 = client.post("/v1/partner-admin-requests", headers=h_o,
-                               json={"full_name": "Unit Admin2",
-                                     "mobile": mobile2}).json()
-        ok = client.post(f"/v1/partner-admin-requests/{created2['id']}/review",
-                         headers=h_m, json={"status": "approved"}).json()
-        assert ok["status"] == "approved" and ok["created_user_id"]
-        db = SessionLocal()
-        try:
-            admin = db.get(User, ok["created_user_id"])
-            assert admin.role == "partner_admin"
-            assert admin.partner_id == owner["user"]["partner_id"]
-        finally:
-            db.close()
-        dupe = client.post("/v1/partner-admin-requests", headers=h_o,
-                           json={"full_name": "Dupe", "mobile": "9000000004"}).json()
-        r = client.post(f"/v1/partner-admin-requests/{dupe['id']}/review",
-                        headers=h_m, json={"status": "approved"})
-        assert r.status_code == 409
-        assert r.json() == {"detail": "mobile_taken"}
-
-
 def test_pincodes_sorted(capsys):
     with make_client() as client:
         pins = client.get("/v1/pincodes").json()

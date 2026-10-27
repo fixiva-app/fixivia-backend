@@ -9,7 +9,6 @@ from app.config import settings
 ROLES = (
     "master_admin",
     "partner_owner",
-    "partner_admin",
     "service_partner",
     "customer",
 )

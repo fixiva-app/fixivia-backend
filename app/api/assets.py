@@ -14,8 +14,8 @@ from app.services.notify import audit
 
 router = APIRouter(prefix="/v1", tags=["assets"], route_class=CommitRoute)
 
-# Business decision: assets belong to the business — owners and admins only.
-_ADMIN = ("partner_owner", "partner_admin")
+# Business decision: assets belong to the business — owners only.
+_ADMIN = ("partner_owner",)
 
 ASSET_CATEGORIES = (
     "laptop",

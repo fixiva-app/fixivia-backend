@@ -99,21 +99,21 @@ def test_register_existing_mobile_conflicts(capsys):
 
 def test_register_unknown_role_rejected(capsys):
     with make_client() as client:
-        mobile = _mobile()
-        code = _code(client, capsys, mobile, "register")
-        r = _verify(client, mobile, "register", code, role="ceo")
-        assert r.status_code == 400
-        assert r.json() == {"detail": "invalid_role"}
-
-
-def test_register_privileged_roles_forbidden(capsys):
-    with make_client() as client:
-        for role in ("master_admin", "partner_admin"):
+        for role in ("ceo", "partner_admin"):
             mobile = _mobile()
             code = _code(client, capsys, mobile, "register")
-            r = _verify(client, mobile, "register", code, full_name="Rogue", role=role)
-            assert r.status_code == 403, r.text
-            assert r.json() == {"detail": "forbidden"}
+            r = _verify(client, mobile, "register", code, role=role)
+            assert r.status_code == 400, role
+            assert r.json() == {"detail": "invalid_role"}
+
+
+def test_register_master_forbidden(capsys):
+    with make_client() as client:
+        mobile = _mobile()
+        code = _code(client, capsys, mobile, "register")
+        r = _verify(client, mobile, "register", code, full_name="Rogue", role="master_admin")
+        assert r.status_code == 403, r.text
+        assert r.json() == {"detail": "forbidden"}
 
 
 def test_register_customer_defaults(capsys):

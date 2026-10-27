@@ -98,7 +98,7 @@ def update_profile(
 
 
 @router.get("/sp/roster")
-def roster(user: User = Depends(require_roles("partner_owner", "partner_admin")), db: Session = Depends(get_db)) -> list[dict]:
+def roster(user: User = Depends(require_roles("partner_owner",)), db: Session = Depends(get_db)) -> list[dict]:
     users = db.scalars(select(User).where(User.partner_id == user.partner_id, User.role == "service_partner"))
     out = []
     for u in users:
@@ -123,7 +123,7 @@ class KycBody(BaseModel):
 def review_kyc(
     sp_id: str,
     body: KycBody,
-    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("partner_owner",)),
     db: Session = Depends(get_db),
 ) -> dict:
     p = db.get(ServicePartnerProfile, sp_id)
@@ -201,7 +201,7 @@ def earnings(user: User = Depends(require_roles("service_partner")), db: Session
 
 @router.get("/payouts")
 def list_payouts(
-    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("partner_owner",)),
     db: Session = Depends(get_db),
 ) -> list[dict]:
     rows = db.scalars(
@@ -229,7 +229,7 @@ def list_payouts(
 @router.post("/payouts/{payout_id}/paid")
 def mark_payout_paid(
     payout_id: str,
-    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("partner_owner",)),
     db: Session = Depends(get_db),
 ) -> dict:
     row = db.get(PayoutLedger, payout_id)

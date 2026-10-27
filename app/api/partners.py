@@ -14,7 +14,6 @@ from app.deps import current_user, require_roles
 from app.domain.otp import generate_code, hash_code
 from app.models import (
     Partner,
-    PartnerAdminRequest,
     PartnerInvite,
     PartnerPincode,
     Pincode,
@@ -179,86 +178,6 @@ def _assign_pincodes(db: Session, partner: Partner, pincodes: list[str]) -> None
     db.flush()
     for code in pincodes:
         db.add(PartnerPincode(partner_id=partner.id, pincode=code))
-
-
-class AdminReqBody(BaseModel):
-    full_name: str
-    mobile: str
-    email: str = ""
-
-
-@router.post("/partner-admin-requests")
-def request_admin(
-    body: AdminReqBody,
-    user: User = Depends(require_roles("partner_owner")),
-    db: Session = Depends(get_db),
-) -> dict:
-    row = PartnerAdminRequest(
-        partner_id=user.partner_id,
-        full_name=body.full_name,
-        mobile=body.mobile,
-        email=body.email,
-        requested_by=user.id,
-    )
-    db.add(row)
-    db.flush()
-    return {"id": row.id, "status": row.status}
-
-
-@router.get("/partner-admin-requests")
-def list_admin_requests(
-    user: User = Depends(require_roles("master_admin", "partner_owner")),
-    db: Session = Depends(get_db),
-) -> list[dict]:
-    q = select(PartnerAdminRequest)
-    if user.role != "master_admin":
-        q = q.where(PartnerAdminRequest.partner_id == user.partner_id)
-    rows = db.scalars(q.order_by(PartnerAdminRequest.created_at.desc()))
-    return [
-        {
-            "id": r.id,
-            "partner_id": r.partner_id,
-            "full_name": r.full_name,
-            "mobile": r.mobile,
-            "email": r.email,
-            "status": r.status,
-            "created_user_id": r.created_user_id,
-        }
-        for r in rows
-    ]
-
-
-@router.post("/partner-admin-requests/{req_id}/review")
-def review_admin_request(
-    req_id: str,
-    body: ReviewBody,
-    user: User = Depends(require_roles("master_admin")),
-    db: Session = Depends(get_db),
-) -> dict:
-    row = db.get(PartnerAdminRequest, req_id)
-    if row is None:
-        raise HTTPException(404, "not_found")
-    if body.status not in ("approved", "rejected"):
-        raise HTTPException(400, "bad_status")
-    row.status = body.status
-    row.reviewed_by = user.id
-    if body.status == "approved":
-        existing = db.scalar(select(User).where(User.mobile == row.mobile))
-        if existing:
-            raise HTTPException(409, "mobile_taken")
-        admin = User(
-            role="partner_admin",
-            partner_id=row.partner_id,
-            full_name=row.full_name,
-            mobile=row.mobile,
-            email=row.email,
-            status="active",
-        )
-        db.add(admin)
-        db.flush()
-        row.created_user_id = admin.id
-        print(f"[EMAIL] partner admin credentials mobile={row.mobile} email={row.email} login via OTP", flush=True)
-    return {"id": row.id, "status": row.status, "created_user_id": row.created_user_id}
 
 
 @router.get("/pincodes")

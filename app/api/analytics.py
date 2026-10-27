@@ -17,7 +17,7 @@ router = APIRouter(prefix="/v1", tags=["analytics"], route_class=CommitRoute)
 
 @router.get("/analytics")
 def analytics(
-    user: User = Depends(require_roles("master_admin", "partner_owner", "partner_admin", "service_partner")),
+    user: User = Depends(require_roles("master_admin", "partner_owner", "service_partner")),
     db: Session = Depends(get_db),
     days: int = 30,
     pincode: str | None = None,
@@ -26,7 +26,7 @@ def analytics(
 ) -> dict:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     q = select(Booking).where(Booking.created_at >= since)
-    if user.role in ("partner_owner", "partner_admin"):
+    if user.role in ("partner_owner",):
         q = q.where(Booking.partner_id == user.partner_id)
     if user.role == "service_partner":
         q = q.where(Booking.assigned_sp_id == user.id)

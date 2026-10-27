@@ -68,13 +68,13 @@ def test_ensure_dev_users_seeds_master_from_env_on_prod(fresh_db, monkeypatch):
 def test_seed_if_empty_full_then_idempotent(fresh_db):
     seed_if_empty(fresh_db)
     assert _counts(fresh_db) == {
-        "users": 5, "pins": 4, "cats": 10, "partners": 1, "invoices": 1,
+        "users": 4, "pins": 4, "cats": 10, "partners": 1, "invoices": 1,
     }
     sp = fresh_db.scalar(select(User).where(User.mobile == "9000000003"))
     assert sp.partner_id is not None
     seed_if_empty(fresh_db)
     assert _counts(fresh_db) == {
-        "users": 5, "pins": 4, "cats": 10, "partners": 1, "invoices": 1,
+        "users": 4, "pins": 4, "cats": 10, "partners": 1, "invoices": 1,
     }
     # Direct re-runs short-circuit on existing rows (idempotent).
     _seed_geo_and_catalog(fresh_db)
@@ -88,7 +88,6 @@ def test_ensure_dev_users_bootstraps_geo_and_org(fresh_db):
     users = ensure_dev_users(fresh_db)
     assert [u.role for u in users] == [
         "master_admin", "partner_owner", "service_partner", "customer",
-        "partner_admin",
     ]
     assert fresh_db.scalar(select(Pincode).limit(1)) is not None
     assert fresh_db.scalar(select(Partner).limit(1)) is not None
@@ -107,7 +106,7 @@ def test_seed_invoice_guards(fresh_db):
 
 def test_inject_payload_shape(fresh_db):
     accounts = inject_payload(fresh_db)
-    assert len(accounts) == 5
+    assert len(accounts) == 4
     for acc in accounts:
         assert set(acc) == {"mobile", "role", "full_name", "email", "user", "token"}
         assert acc["user"]["role"] == acc["role"]
