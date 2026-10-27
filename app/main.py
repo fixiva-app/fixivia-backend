@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.analytics import router as analytics_router
+from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.dev import router as dev_router
 from app.api.bookings import router as bookings_router
@@ -50,3 +51,4 @@ app.include_router(products_router)
 app.include_router(bookings_router)
 app.include_router(tech_router)
 app.include_router(analytics_router)
+app.include_router(assets_router)
