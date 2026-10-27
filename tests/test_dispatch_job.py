@@ -15,7 +15,7 @@ from app.jobs.dispatch_job import (
     dispatch_pool,
     dispatch_repool_open,
     eligible_technicians,
-    partner_admins,
+    partner_owners,
     slot_job_count,
     with_busy_retry,
 )
@@ -162,17 +162,16 @@ def test_slot_job_count_statuses(db):
     assert slot_job_count(db, "ghost", DAY, "morning") == 0
 
 
-# -- partner_admins ------------------------------------------------------------
+# -- partner_owners ------------------------------------------------------------
 
-def test_partner_admins_scope(db):
+def test_partner_owners_scope(db):
     p1, p2 = _partner(db), _partner(db)
     owner = _user(db, "partner_owner", p1.id)
-    admin = _user(db, "partner_admin", p1.id)
-    _user(db, "partner_admin", p1.id, status="suspended")
+    _user(db, "partner_owner", p1.id, status="suspended")
     _user(db, "customer", p1.id)
     _user(db, "partner_owner", p2.id)
-    got = {u.id for u in partner_admins(db, p1.id)}
-    assert got == {owner.id, admin.id}
+    got = {u.id for u in partner_owners(db, p1.id)}
+    assert got == {owner.id}
 
 
 # -- eligible_technicians -------------------------------------------------------
@@ -221,10 +220,9 @@ def test_eligible_matrix(db):
 def _staffed(db, pin="682001"):
     partner = _partner(db)
     owner = _user(db, "partner_owner", partner.id)
-    admin = _user(db, "partner_admin", partner.id)
     cust = _user(db, "customer")
     cat = _cat(db)
-    return partner, owner, admin, cust, cat
+    return partner, owner, cust, cat
 
 
 def _notes(db, user_id, bid):
@@ -234,7 +232,7 @@ def _notes(db, user_id, bid):
 
 
 def test_pool_happy_path_and_repool(db):
-    partner, owner, admin, cust, cat = _staffed(db)
+    partner, owner, cust, cat = _staffed(db)
     s1 = _sp(db, partner, cat.id, "682001")
     s2 = _sp(db, partner, cat.id, "682001")
     bid = _booking(db, partner, cust, cat).id
@@ -247,7 +245,6 @@ def test_pool_happy_path_and_repool(db):
     assert booking.last_dispatch_at is not None
     assert _notes(db, s1.id, bid) == ["offer"]
     assert _notes(db, owner.id, bid) == ["new_request"]
-    assert _notes(db, admin.id, bid) == ["new_request"]
 
     out = dispatch_pool(db, bid, admin_reminder=True)
     assert out["offered"] == [s1.id, s2.id]
@@ -259,13 +256,13 @@ def test_pool_happy_path_and_repool(db):
 
 def test_pool_skips_missing_and_settled(db):
     assert dispatch_pool(db, "00000000-0000-0000-0000-000000000000") == {"skipped": True}
-    partner, _, _, cust, cat = _staffed(db)
+    partner, _, cust, cat = _staffed(db)
     bid = _booking(db, partner, cust, cat, status="assigned").id
     assert dispatch_pool(db, bid) == {"skipped": True}
 
 
 def test_pool_partner_gates(db):
-    partner, _, _, cust, cat = _staffed(db, "682001")
+    partner, _, cust, cat = _staffed(db, "682001")
     suspended = _partner(db, status="suspended")
     b1 = _booking(db, suspended, cust, cat).id
     out = dispatch_pool(db, b1)
@@ -278,7 +275,7 @@ def test_pool_partner_gates(db):
 
 
 def test_pool_empty_pool_note(db):
-    partner, owner, _, cust, cat = _staffed(db)
+    partner, owner, cust, cat = _staffed(db)
     lonely = _cat(db)
     bid = _booking(db, partner, cust, lonely).id  # nobody offers this category
     out = dispatch_pool(db, bid)
@@ -288,7 +285,7 @@ def test_pool_empty_pool_note(db):
 
 
 def test_pool_settled_mid_pool_rolls_back(db, monkeypatch):
-    partner, _, _, cust, cat = _staffed(db)
+    partner, _, cust, cat = _staffed(db)
     _sp(db, partner, cat.id, "682001")
     bid = _booking(db, partner, cust, cat).id
 
@@ -306,7 +303,7 @@ def test_pool_settled_mid_pool_rolls_back(db, monkeypatch):
 
 
 def test_pool_exception_rolls_back(db, monkeypatch):
-    partner, _, _, cust, cat = _staffed(db)
+    partner, _, cust, cat = _staffed(db)
     _sp(db, partner, cat.id, "682001")
     bid = _booking(db, partner, cust, cat).id
 
@@ -332,7 +329,7 @@ def _offer_stamp(db, bid, sp_id):
 
 def test_repool_refreshes_offer_stamp_keeps_offered_at(db, monkeypatch):
     """Merged upsert: re-pool bumps last_notified_at, never offered_at."""
-    partner, _, _, cust, cat = _staffed(db)
+    partner, _, cust, cat = _staffed(db)
     sp = _sp(db, partner, cat.id, "682001")
     bid = _booking(db, partner, cust, cat).id
     t0 = datetime(2027, 2, 1, 10, 0, tzinfo=timezone.utc)
@@ -349,7 +346,7 @@ def test_repool_refreshes_offer_stamp_keeps_offered_at(db, monkeypatch):
 
 
 def test_repool_open_fanout(db):
-    partner, owner, _, cust, cat = _staffed(db)
+    partner, owner, cust, cat = _staffed(db)
     _sp(db, partner, cat.id, "682001")
     b1 = _booking(db, partner, cust, cat).id
     b2 = _booking(db, partner, cust, cat).id

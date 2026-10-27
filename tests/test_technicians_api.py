@@ -85,7 +85,6 @@ def test_profile_put_validates_replaces_and_links_docs(capsys):
 def test_roster_lists_tenant_with_states(capsys):
     with make_client() as client:
         owner = _login(client, capsys, "9000000002")
-        admin = _login(client, capsys, "9000000005")
         cust = _login(client, capsys, "9000000004")
         h_o = _headers(owner["token"])
         assert client.get("/v1/sp/roster", headers=_headers(cust["token"])).status_code == 403
@@ -94,9 +93,6 @@ def test_roster_lists_tenant_with_states(capsys):
         assert by_mobile["9000000003"]["kyc_status"] in (
             "approved", "pending_partner_verification")
         assert set(rows[0]) == {"id", "full_name", "mobile", "kyc_status", "status"}
-        admin_rows = client.get("/v1/sp/roster",
-                                headers=_headers(admin["token"])).json()
-        assert len(admin_rows) == len(rows)
         db = SessionLocal()
         try:
             pid = by_mobile["9000000003"]["id"]

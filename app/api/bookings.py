@@ -208,7 +208,7 @@ def list_bookings(
             BookingOffer.service_partner_id == user.id, BookingOffer.booking_id.not_in(declined)
         )
         q = q.where((Booking.assigned_sp_id == user.id) | (Booking.id.in_(offered)))
-    elif user.role in ("partner_owner", "partner_admin"):
+    elif user.role in ("partner_owner",):
         q = q.where(Booking.partner_id == user.partner_id)
     elif user.role != "master_admin":
         raise HTTPException(403, "forbidden")
@@ -305,8 +305,8 @@ def _finalize_assignment(db: Session, b: Booking, sp_user: User, actor: User | N
     else:
         print(f"[OTP] purpose=start_work REUSE booking_id={b.id} (same code as first accept)", flush=True)
     notify(db, b.customer_id, "booking_confirmed", b.id, technician=sp_user.full_name)
-    for admin in db.scalars(select(User).where(User.partner_id == b.partner_id, User.role.in_(("partner_owner", "partner_admin")))):
-        notify(db, admin.id, "filled", b.id)
+    for owner in db.scalars(select(User).where(User.partner_id == b.partner_id, User.role.in_(("partner_owner",)))):
+        notify(db, owner.id, "filled", b.id)
     others = db.scalars(select(BookingOffer).where(BookingOffer.booking_id == b.id, BookingOffer.service_partner_id != sp_user.id))
     for o in others:
         notify(db, o.service_partner_id, "already_taken", b.id)
@@ -342,7 +342,7 @@ def _assignable_payload(db: Session, b: Booking) -> dict:
 @router.get("/bookings/{booking_id}/assignable")
 def assignable_technicians(
     booking_id: str,
-    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("partner_owner",)),
     db: Session = Depends(get_db),
 ) -> dict:
     b = db.get(Booking, booking_id)
@@ -361,7 +361,7 @@ class ForceAssignBody(BaseModel):
 def force_assign_booking(
     booking_id: str,
     body: ForceAssignBody,
-    user: User = Depends(require_roles("partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("partner_owner",)),
     db: Session = Depends(get_db),
 ) -> dict:
     """Partner fallback after a failed 3h cycle. Strict first-accept before that.
@@ -422,7 +422,7 @@ def decline_booking(
 def drop_booking(
     booking_id: str,
     background: BackgroundTasks,
-    user: User = Depends(require_roles("service_partner", "partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("service_partner", "partner_owner")),
     db: Session = Depends(get_db),
 ) -> dict:
     b = db.get(Booking, booking_id)
@@ -486,7 +486,7 @@ class CompleteBody(BaseModel):
 def complete_booking(
     booking_id: str,
     body: CompleteBody,
-    user: User = Depends(require_roles("service_partner", "partner_owner", "partner_admin")),
+    user: User = Depends(require_roles("service_partner", "partner_owner")),
     db: Session = Depends(get_db),
 ) -> dict:
     b = db.get(Booking, booking_id)
@@ -564,7 +564,7 @@ def _can_see(user: User, b: Booking) -> None:
         return
     if user.role == "service_partner" and (b.assigned_sp_id == user.id):
         return
-    if user.role in ("partner_owner", "partner_admin") and b.partner_id == user.partner_id:
+    if user.role in ("partner_owner",) and b.partner_id == user.partner_id:
         return
     if user.role == "service_partner":
         return  # offers checked at list

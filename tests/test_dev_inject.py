@@ -14,14 +14,12 @@ def test_inject_users_creates_one_of_each_role():
             "partner_owner",
             "service_partner",
             "customer",
-            "partner_admin",
         ]
         assert {a["mobile"] for a in accounts} == {
             "9000000001",
             "9000000002",
             "9000000003",
             "9000000004",
-            "9000000005",
         }
         for acc in accounts:
             assert acc["token"]

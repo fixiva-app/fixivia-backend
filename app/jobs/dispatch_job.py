@@ -67,12 +67,12 @@ def slot_job_count(db: Session, sp_id: str, service_date, slot: str) -> int:
     ) or 0
 
 
-def partner_admins(db: Session, partner_id: str) -> list[User]:
+def partner_owners(db: Session, partner_id: str) -> list[User]:
     return list(
         db.scalars(
             select(User).where(
                 User.partner_id == partner_id,
-                User.role.in_(("partner_owner", "partner_admin")),
+                User.role.in_(("partner_owner",)),
                 User.status == "active",
             )
         )
@@ -209,8 +209,8 @@ def dispatch_pool(db: Session, booking_id: str, admin_reminder: bool = False) ->
         booking.dispatch_refresh_count = (booking.dispatch_refresh_count or 0) + 1
         booking.pool_empty = len(offered) == 0
         ntype = "open_reminder" if admin_reminder else ("empty_pool" if not offered else "new_request")
-        for admin in partner_admins(db, booking.partner_id):
-            notify(db, admin.id, ntype, booking.id, offered=len(offered))
+        for owner in partner_owners(db, booking.partner_id):
+            notify(db, owner.id, ntype, booking.id, offered=len(offered))
         db.flush()
         savepoint.commit()
     except Exception:

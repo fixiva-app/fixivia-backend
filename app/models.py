@@ -123,6 +123,8 @@ class OtpCodeRow(Base):
     booking_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
 
+# Retired: the partner_admin role was removed; the table stays so existing
+# databases keep their history, but no endpoint reads or writes it.
 class PartnerAdminRequest(Base):
     __tablename__ = "partner_admin_requests"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -363,7 +365,7 @@ class Product(Base):
 
 class Asset(Base):
     """Org asset (laptop, printer, UPS, ...). Partner-scoped; partner owners
-    and admins only — master_admin has no access by business decision."""
+    only — master_admin has no access by business decision."""
 
     __tablename__ = "assets"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

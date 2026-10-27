@@ -120,9 +120,8 @@ def verify_otp(body: OtpVerify, db: Session = Depends(get_db)) -> dict:
         role = body.role or "customer"
         if role not in ROLES:
             raise HTTPException(400, "invalid_role")
-        if role in ("master_admin", "partner_admin"):
-            # Privileged roles are never self-registrable: masters come from
-            # seed/ops, admins only via the owner-request approve flow.
+        if role == "master_admin":
+            # Masters are never self-registrable: they come from seed/ops.
             raise HTTPException(403, "forbidden")
         partner_id = body.partner_id
         if role == "partner_owner":

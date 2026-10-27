@@ -50,12 +50,6 @@ DEV_ACCOUNTS = (
         "full_name": "Meera Customer",
         "email": "meera@example.com",
     },
-    {
-        "mobile": "9000000005",
-        "role": "partner_admin",
-        "full_name": "Divya Partner Admin",
-        "email": "admin@homecare.local",
-    },
 )
 
 SEED_CATEGORIES = [
@@ -137,7 +131,7 @@ def ensure_dev_users(db: Session) -> list[User]:
     print(
         "[SEED] demo mobiles "
         "master=9000000001 owner=9000000002 sp=9000000003 "
-        "customer=9000000004 partner_admin=9000000005",
+        "customer=9000000004",
         flush=True,
     )
     return users
