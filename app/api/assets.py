@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -34,8 +35,11 @@ ASSET_CATEGORIES = (
 
 _CODE_RE = re.compile(r"^[A-Z0-9]{3}$")
 _SIM_RE = re.compile(r"^\d{10}$")
-_TAG_RE = re.compile(r"^AST-([A-Z0-9]{3})-(\d{4})$")
-_MAX_SEQ = 9999
+# New random tags (AST-XXX-XXXX) and legacy sequential tags (AST-XXX-NNNN)
+# share one shape check; legacy stickers stay valid forever.
+_TAG_RE = re.compile(r"^AST-[A-Z0-9]{3}-[A-Z0-9]{4}$")
+# Crockford-style: no ambiguous 0/O/1/I on freshly generated tags.
+_TAG_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 _MAX_PRINT = 200
 
 
@@ -103,57 +107,48 @@ def _check_serial_free(db: Session, serial: str | None, ignore_id: str | None = 
         raise HTTPException(409, "serial_taken")
 
 
-def _used_numbers(db: Session, partner_id: str, loc: str) -> set[int]:
-    """Numbers taken by assets or unconsumed pre-print reservations."""
-    prefix = f"AST-{loc}-"
-    codes = list(
-        db.scalars(
-            select(Asset.asset_code).where(
-                Asset.partner_id == partner_id,
-                Asset.asset_code.like(prefix + "%"),
-            )
-        )
-    )
-    codes += list(
-        db.scalars(
-            select(AssetTagReservation.asset_code).where(
-                AssetTagReservation.partner_id == partner_id,
-                AssetTagReservation.asset_code.like(prefix + "%"),
+def _random_tag() -> str:
+    part = lambda n: "".join(secrets.choice(_TAG_ALPHABET) for _ in range(n))
+    return f"AST-{part(3)}-{part(4)}"
+
+
+def _code_in_use(db: Session, tag: str) -> bool:
+    if db.scalar(select(Asset.id).where(Asset.asset_code == tag)) is not None:
+        return True
+    return (
+        db.scalar(
+            select(AssetTagReservation.id).where(
+                AssetTagReservation.asset_code == tag,
                 AssetTagReservation.consumed_at.is_(None),
             )
         )
+        is not None
     )
-    used: set[int] = set()
-    for code in codes:
-        try:
-            used.add(int(code.rsplit("-", 1)[1]))
-        except (ValueError, IndexError):
+
+
+def _fresh_codes(db: Session, count: int) -> list[str]:
+    """Generate globally-unique random tags. asset_code is globally unique,
+    so tags are shop-agnostic: any sticker works at any shop."""
+    codes: list[str] = []
+    attempts = 0
+    while len(codes) < count:
+        attempts += 1
+        if attempts > count * 50 + 100:
+            raise HTTPException(409, "code_exhausted")
+        tag = _random_tag()
+        if tag in codes or _code_in_use(db, tag):
             continue
-    return used
+        codes.append(tag)
+    return codes
 
 
-def _next_code(db: Session, partner_id: str, loc: str) -> str:
-    """Smallest free number: gaps fill first (1,2,5 → next is 3)."""
-    used = _used_numbers(db, partner_id, loc)
-    for nxt in range(1, _MAX_SEQ + 1):
-        if nxt not in used:
-            return f"AST-{loc}-{nxt:04d}"
-    raise HTTPException(409, "code_exhausted")
-
-
-def _explicit_code(db: Session, partner_id: str, loc: str, raw: str) -> str:
-    """Validate a claimed pre-printed tag; consume its reservation if any."""
+def _explicit_code(db: Session, partner_id: str, raw: str) -> str:
+    """Validate a claimed pre-printed tag; consume its reservation if any.
+    The tag is shop-agnostic — no prefix/location matching."""
     tag = (raw or "").strip().upper()
-    m = _TAG_RE.match(tag)
-    if not m or m.group(1) != loc or m.group(2) == "0000":
+    if not _TAG_RE.match(tag):
         raise HTTPException(422, "bad_asset_code")
-    taken = db.scalar(
-        select(Asset.id).where(
-            Asset.partner_id == partner_id,
-            Asset.asset_code == tag,
-        )
-    )
-    if taken is not None:
+    if db.scalar(select(Asset.id).where(Asset.asset_code == tag)) is not None:
         raise HTTPException(409, "asset_code_taken")
     reserved = db.scalar(
         select(AssetTagReservation).where(
@@ -286,13 +281,7 @@ def get_asset(
 class TagPrintRequest(BaseModel):
     model_config = _stripped()
 
-    location_code: str
     count: int = 12
-
-    @field_validator("location_code")
-    @classmethod
-    def _loc(cls, v: str) -> str:
-        return _location_code(v)
 
 
 @router.post("/asset-tags/print")
@@ -301,26 +290,18 @@ def print_blank_tags(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(*_ADMIN)),
 ) -> dict:
-    """Reserve the next free numbers and return them for blank-tag printing.
-    Reservations keep gap-fill from reusing printed-but-unclaimed numbers."""
+    """Reserve fresh random tags for blank-sticker printing. Tags are
+    shop-agnostic — any sticker can be claimed at any shop later."""
     if not user.partner_id:
         raise HTTPException(403, "no_partner")
     if body.count < 1 or body.count > _MAX_PRINT:
         raise HTTPException(422, "bad_print_count")
-    used = _used_numbers(db, user.partner_id, body.location_code)
-    codes: list[str] = []
-    for nxt in range(1, _MAX_SEQ + 1):
-        if nxt not in used:
-            codes.append(f"AST-{body.location_code}-{nxt:04d}")
-            if len(codes) >= body.count:
-                break
-    if len(codes) < body.count:
-        raise HTTPException(409, "code_exhausted")
+    codes = _fresh_codes(db, body.count)
     for code in codes:
         db.add(AssetTagReservation(partner_id=user.partner_id, asset_code=code))
     db.flush()
     audit(db, user.id, "asset_tags_print", "asset_tag_reservation", codes[0])
-    return {"location_code": body.location_code, "codes": codes}
+    return {"codes": codes}
 
 
 @router.post("/assets")
@@ -333,9 +314,9 @@ def create_asset(
         raise HTTPException(403, "no_partner")
     _check_serial_free(db, body.serial)
     if body.asset_code:
-        asset_code = _explicit_code(db, user.partner_id, body.location_code, body.asset_code)
+        asset_code = _explicit_code(db, user.partner_id, body.asset_code)
     else:
-        asset_code = _next_code(db, user.partner_id, body.location_code)
+        asset_code = _fresh_codes(db, 1)[0]
     asset = Asset(
         partner_id=user.partner_id,
         asset_code=asset_code,
