@@ -2,6 +2,9 @@
 .env
 *.db
 fixvia.db
+*.db-shm
+*.db-wal
+*.db.corrupt-*
 !.env.example
 .venv/
 __pycache__/
